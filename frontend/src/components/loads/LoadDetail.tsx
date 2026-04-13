@@ -1,0 +1,319 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { Phone, ChevronDown, ChevronRight, CheckSquare, Square } from 'lucide-react';
+import { clsx } from 'clsx';
+import { apiFetch } from '@/lib/api';
+import { Load, CarrierSummary, Call } from '@/types';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
+
+type Tab = 'booking' | 'accounting' | 'tracking';
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDateTime(iso: string): string {
+  return `${formatDate(iso)} ${formatTime(iso)}`;
+}
+
+function MetadataChip({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[10px] text-[#555555] uppercase tracking-wider">{label}</span>
+      <span className="text-xs text-white font-mono-data">{value}</span>
+    </div>
+  );
+}
+
+function CarrierRow({ carrier, selected, onToggle }: {
+  carrier: CarrierSummary;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      onClick={onToggle}
+      className="flex items-center gap-3 px-4 py-3 hover:bg-[#1a1a1a] transition-colors cursor-pointer border-b border-[#1a1a1a] last:border-0"
+    >
+      <button className="shrink-0 text-[#555555] hover:text-white transition-colors">
+        {selected ? (
+          <CheckSquare className="w-4 h-4 text-white" />
+        ) : (
+          <Square className="w-4 h-4" />
+        )}
+      </button>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm text-white truncate">{carrier.legal_name}</p>
+        <p className="text-xs text-[#555555] font-mono-data">MC {carrier.mc_number}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <StatusBadge status={carrier.status} />
+        <span className="text-xs text-[#555555] font-mono-data whitespace-nowrap">
+          {carrier.similar_match_count} matches
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function BookingTab({ load }: { load: Load }) {
+  const [carriers, setCarriers] = useState<CarrierSummary[]>([]);
+  const [calls, setCalls] = useState<Call[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadId = load.load_id;
+    Promise.all([
+      apiFetch<CarrierSummary[]>(`/api/loads/${loadId}/carriers`),
+      apiFetch<Call[]>(`/api/loads/${loadId}/calls`),
+    ]).then(([c, calls]) => {
+      setCarriers(c);
+      setCalls(calls);
+    }).catch(console.error).finally(() => setLoading(false));
+  }, [load.load_id]);
+
+  const toggleCarrier = (id: string) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    if (selected.size === carriers.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(carriers.map(c => c.id)));
+    }
+  };
+
+  const inboundCalls = calls.filter(c => c.direction === 'inbound');
+  const outboundCalls = calls.filter(c => c.direction === 'outbound');
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-12">
+      <LoadingSpinner />
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Recommended Carriers */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-white">Recommended Carriers</h3>
+            <span className="text-xs text-[#555555] bg-[#1a1a1a] px-2 py-0.5 rounded font-mono-data">
+              {carriers.length}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={selectAll}
+              className="text-xs text-[#888888] hover:text-white transition-colors"
+            >
+              {selected.size === carriers.length && carriers.length > 0 ? 'Deselect all' : 'Select all'}
+            </button>
+            <button className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded transition-colors">
+              <Phone className="w-3 h-3" />
+              Call {selected.size > 0 ? `(${selected.size})` : ''}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden">
+          {carriers.length === 0 ? (
+            <div className="px-4 py-8 text-center text-[#555555] text-sm">
+              No recommended carriers for this load
+            </div>
+          ) : (
+            carriers.map(c => (
+              <CarrierRow
+                key={c.id}
+                carrier={c}
+                selected={selected.has(c.id)}
+                onToggle={() => toggleCarrier(c.id)}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Outbound Calls */}
+      {outboundCalls.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-3">
+            Outbound <span className="text-[#555555] font-normal ml-1 text-xs font-mono-data">({outboundCalls.length})</span>
+          </h3>
+          <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden divide-y divide-[#1a1a1a]">
+            {outboundCalls.map(call => (
+              <div key={call.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#1a1a1a] transition-colors">
+                <Phone className="w-3.5 h-3.5 text-[#555555] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white font-mono-data">{call.phone_number ?? 'Unknown'}</p>
+                  <p className="text-xs text-[#555555]">{formatDateTime(call.call_start)}</p>
+                </div>
+                <StatusBadge status={call.outcome} />
+                <button className="flex items-center gap-1 text-xs bg-white/10 hover:bg-white/20 text-white px-2.5 py-1.5 rounded transition-colors">
+                  <Phone className="w-3 h-3" />
+                  Call
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Inbound Calls */}
+      {inboundCalls.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-white mb-3">
+            Inbound <span className="text-[#555555] font-normal ml-1 text-xs font-mono-data">({inboundCalls.length})</span>
+          </h3>
+          <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden divide-y divide-[#1a1a1a]">
+            {inboundCalls.map(call => (
+              <div key={call.id} className="flex items-center gap-3 px-4 py-3 hover:bg-[#1a1a1a] transition-colors">
+                <Phone className="w-3.5 h-3.5 text-[#555555] shrink-0 rotate-180" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white font-mono-data">{call.phone_number ?? 'Unknown'}</p>
+                  <p className="text-xs text-[#555555]">{call.use_case}</p>
+                </div>
+                <p className="text-xs text-[#555555]">{formatDate(call.call_start)}</p>
+                <StatusBadge status={call.outcome} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {calls.length === 0 && (
+        <div className="text-center py-8 text-[#555555] text-sm">
+          No call history for this load
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComingSoonTab({ name }: { name: string }) {
+  return (
+    <div className="flex items-center justify-center py-20">
+      <div className="text-center">
+        <p className="text-[#444444] text-sm">{name}</p>
+        <p className="text-[#333333] text-xs mt-1">Coming soon</p>
+      </div>
+    </div>
+  );
+}
+
+interface LoadDetailProps {
+  load: Load;
+}
+
+export function LoadDetail({ load }: LoadDetailProps) {
+  const [activeTab, setActiveTab] = useState<Tab>('booking');
+  const [notesExpanded, setNotesExpanded] = useState(false);
+
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'booking', label: 'Booking' },
+    { key: 'accounting', label: 'Accounting' },
+    { key: 'tracking', label: 'Tracking' },
+  ];
+
+  const formatDateLocal = (iso: string) =>
+    new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const formatTimeLocal = (iso: string) =>
+    new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-[#2a2a2a] flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-bold text-white font-mono-data">Load {load.load_id}</h2>
+          <StatusBadge status={load.status} />
+        </div>
+        <span className="text-xs text-[#555555]">{load.equipment_type}</span>
+      </div>
+
+      {/* Route Info */}
+      <div className="px-6 py-4 border-b border-[#2a2a2a] shrink-0">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex-1">
+            <p className="text-xs text-[#555555] uppercase tracking-wider mb-0.5">Origin</p>
+            <p className="text-sm font-medium text-white">{load.origin}</p>
+            <p className="text-xs text-[#666666]">{formatDateLocal(load.pickup_datetime)} · {formatTimeLocal(load.pickup_datetime)}</p>
+          </div>
+          <div className="text-[#333333] px-2">→</div>
+          <div className="flex-1 text-right">
+            <p className="text-xs text-[#555555] uppercase tracking-wider mb-0.5">Destination</p>
+            <p className="text-sm font-medium text-white">{load.destination}</p>
+            <p className="text-xs text-[#666666]">{formatDateLocal(load.delivery_datetime)} · {formatTimeLocal(load.delivery_datetime)}</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-[#555555] font-mono-data">{load.miles.toFixed(0)} miles</span>
+          <span className="text-green-400 font-mono-data font-medium">${load.per_mile_rate.toFixed(2)}/mi</span>
+          <span className="text-white font-mono-data font-medium">${load.total_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+        </div>
+      </div>
+
+      {/* Metadata row */}
+      <div className="px-6 py-3 border-b border-[#2a2a2a] grid grid-cols-4 gap-3 shrink-0">
+        <MetadataChip label="Equipment" value={load.equipment_type} />
+        <MetadataChip label="Commodity" value={load.commodity_type} />
+        <MetadataChip label="Weight" value={`${(load.weight / 1000).toFixed(0)}K lbs`} />
+        <MetadataChip label="Ref ID" value={load.reference_id ?? '—'} />
+      </div>
+
+      {/* Notes (collapsible) */}
+      {load.notes && (
+        <div className="px-6 py-3 border-b border-[#2a2a2a] shrink-0">
+          <button
+            onClick={() => setNotesExpanded(!notesExpanded)}
+            className="flex items-center gap-2 text-xs text-[#666666] hover:text-white transition-colors w-full"
+          >
+            {notesExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Notes
+          </button>
+          {notesExpanded && (
+            <p className="mt-2 text-sm text-[#888888] leading-relaxed">{load.notes}</p>
+          )}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="px-6 border-b border-[#2a2a2a] flex gap-0 shrink-0">
+        {TABS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={clsx(
+              'px-4 py-3 text-sm transition-colors border-b-2 -mb-px',
+              activeTab === key
+                ? 'text-white border-white'
+                : 'text-[#555555] border-transparent hover:text-[#888]'
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="flex-1 overflow-y-auto px-6 py-5">
+        {activeTab === 'booking' && <BookingTab load={load} />}
+        {activeTab === 'accounting' && <ComingSoonTab name="Accounting" />}
+        {activeTab === 'tracking' && <ComingSoonTab name="Tracking" />}
+      </div>
+    </div>
+  );
+}
