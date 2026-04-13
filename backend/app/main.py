@@ -7,6 +7,9 @@ from app.routers import calls as calls_router
 from app.routers import shippers as shippers_router
 from app.routers import metrics as metrics_router
 from app.routers import quotes as quotes_router
+from app.routers.agent import carriers as agent_carriers_router
+from app.routers.agent import loads as agent_loads_router
+from app.routers.agent import negotiations as agent_negotiations_router
 
 app = FastAPI(title="HappyFDE API", version="0.1.0")
 
@@ -24,6 +27,9 @@ app.include_router(calls_router.router)
 app.include_router(shippers_router.router)
 app.include_router(metrics_router.router)
 app.include_router(quotes_router.router)
+app.include_router(agent_carriers_router.router)
+app.include_router(agent_loads_router.router)
+app.include_router(agent_negotiations_router.router)
 
 
 @app.get("/api/health")
