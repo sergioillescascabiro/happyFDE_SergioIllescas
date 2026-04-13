@@ -19,6 +19,7 @@ class CallCreateRequest(BaseModel):
     mc_number: str
     direction: str = "inbound"
     phone_number: Optional[str] = None
+    happyrobot_call_id: Optional[str] = None
 
 
 class CallUpdateRequest(BaseModel):
@@ -117,6 +118,7 @@ def create_call(
         call_start=datetime.utcnow(),
         outcome=CallOutcome.in_progress,
         phone_number=payload.phone_number,
+        happyrobot_call_id=payload.happyrobot_call_id,
     )
     db.add(call)
     db.commit()
@@ -168,6 +170,19 @@ def update_call(
     return _call_response(call)
 
 
+# ── POST /api/agent/calls/{call_id}/update (alias for PATCH) ─────────────────
+
+@router.post("/{call_id}/update")
+def update_call_post(
+    call_id: str,
+    payload: CallUpdateRequest,
+    db: Session = Depends(get_db),
+    _: str = Depends(require_agent_key),
+):
+    """POST alias for PATCH update_call — for platforms that don't support PATCH."""
+    return update_call(call_id, payload, db)
+
+
 # ── POST /api/agent/calls/{call_id}/transfer ────────────────────────────────
 
 @router.post("/{call_id}/transfer")
@@ -209,6 +224,13 @@ def classify_call(
     call.call_end = now
     call.duration_seconds = int((now - call.call_start).total_seconds())
     call.outcome = CallOutcome(payload.outcome)
+
+    # Auto-mark linked load as covered when call is booked
+    if payload.outcome == "booked" and call.load_id:
+        from app.models.load import Load, LoadStatus
+        load = db.query(Load).filter(Load.id == call.load_id).first()
+        if load and load.status == LoadStatus.available:
+            load.status = LoadStatus.covered
 
     if payload.sentiment is not None:
         try:

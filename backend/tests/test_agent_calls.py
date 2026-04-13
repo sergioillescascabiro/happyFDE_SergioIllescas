@@ -232,3 +232,75 @@ def test_classify_invalid_outcome(client):
         headers=AGENT_HEADERS,
     )
     assert classify_r.status_code == 422
+
+
+# ── Test 9: Create call with happyrobot_call_id ──────────────────────────────
+
+def test_create_call_with_happyrobot_call_id(client):
+    """POST /api/agent/calls with happyrobot_call_id stores it on the call."""
+    r = client.post(
+        "/api/agent/calls",
+        json={
+            "mc_number": EXISTING_MC,
+            "direction": "inbound",
+            "happyrobot_call_id": "hr-test-session-abc123",
+        },
+        headers=AGENT_HEADERS,
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["happyrobot_call_id"] == "hr-test-session-abc123"
+    assert "call_id" in data
+
+
+# ── Test 10: Classify booked marks load as covered ───────────────────────────
+
+def test_classify_booked_marks_load_covered(client):
+    """classify_call with outcome=booked must transition the linked load to covered."""
+    from app.database import SessionLocal
+    from app.models.load import Load, LoadStatus
+
+    # Find an available load from the DB
+    db = SessionLocal()
+    try:
+        load = db.query(Load).filter(Load.status == LoadStatus.available).first()
+        assert load is not None, "No available loads in DB — run seed first"
+        load_id = load.id
+    finally:
+        db.close()
+
+    # Register a call
+    create_r = client.post(
+        "/api/agent/calls",
+        json={"mc_number": EXISTING_MC},
+        headers=AGENT_HEADERS,
+    )
+    assert create_r.status_code == 200
+    call_id = create_r.json()["call_id"]
+
+    # Link the load
+    patch_r = client.patch(
+        f"/api/agent/calls/{call_id}",
+        json={"load_id": load_id},
+        headers=AGENT_HEADERS,
+    )
+    assert patch_r.status_code == 200
+
+    # Classify as booked
+    classify_r = client.post(
+        f"/api/agent/calls/{call_id}/classify",
+        json={"outcome": "booked", "sentiment": "positive"},
+        headers=AGENT_HEADERS,
+    )
+    assert classify_r.status_code == 200, classify_r.text
+    assert classify_r.json()["outcome"] == "booked"
+
+    # Verify load status changed to covered
+    db2 = SessionLocal()
+    try:
+        updated_load = db2.query(Load).filter(Load.id == load_id).first()
+        assert updated_load.status == LoadStatus.covered, (
+            f"Expected load status=covered, got {updated_load.status}"
+        )
+    finally:
+        db2.close()
