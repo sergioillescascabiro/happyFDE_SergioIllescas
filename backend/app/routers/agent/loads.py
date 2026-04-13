@@ -33,7 +33,9 @@ class AgentLoadResponse(BaseModel):
 
 
 def _to_agent_load(load: Load) -> AgentLoadResponse:
-    per_mile = round(load.loadboard_rate / load.miles, 4) if load.miles > 0 else 0.0
+    # Round to nearest $25 — industry standard, avoids agent saying "$1,345.08"
+    loadboard_rate = round(load.loadboard_rate / 25) * 25
+    per_mile = round(loadboard_rate / load.miles, 2) if load.miles > 0 else 0.0
     return AgentLoadResponse(
         id=load.id,
         load_id=load.load_id,
@@ -49,7 +51,7 @@ def _to_agent_load(load: Load) -> AgentLoadResponse:
         dimensions=load.dimensions,
         notes=load.notes,
         reference_id=load.reference_id,
-        loadboard_rate=round(load.loadboard_rate, 2),
+        loadboard_rate=float(loadboard_rate),
         per_mile_rate=per_mile,
     )
 

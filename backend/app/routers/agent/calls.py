@@ -21,6 +21,11 @@ class CallCreateRequest(BaseModel):
     phone_number: Optional[str] = None
     happyrobot_call_id: Optional[str] = None
 
+    @field_validator("mc_number", mode="before")
+    @classmethod
+    def coerce_mc_number(cls, v):
+        return str(v) if v is not None else v
+
 
 class CallUpdateRequest(BaseModel):
     load_id: Optional[str] = None

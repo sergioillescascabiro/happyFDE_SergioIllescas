@@ -90,9 +90,10 @@ def make_load(load_id, shipper, origin, destination, miles, equipment, commodity
     }
     lo, hi = rate_ranges.get(equipment, (1.50, 2.50))
     per_mile = round(random.uniform(lo, hi), 4)
-    loadboard_rate = round(per_mile * miles, 2)
-    max_rate = round(loadboard_rate * 1.15, 2)
-    min_rate = round(loadboard_rate * 0.85, 2)
+    raw_rate = per_mile * miles
+    loadboard_rate = round(raw_rate / 25) * 25  # round to nearest $25 — industry standard
+    max_rate = round(loadboard_rate * 1.15 / 25) * 25
+    min_rate = round(loadboard_rate * 0.85 / 25) * 25
 
     pickup_dt = TODAY + timedelta(days=pickup_offset_days)
     delivery_dt = pickup_dt + timedelta(hours=int(miles / 55))  # ~55 mph average

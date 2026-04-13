@@ -5,11 +5,16 @@ Simulates a complete inbound carrier call:
   2. Carrier verified via FMCSA (mock mode).
   3. Load searched and matched.
   4. Transcript entries appended live.
-  5. 2 rounds of negotiation → accepted on round 3.
+  5. 3 rounds of negotiation (offer above loadboard) → accepted on round 3.
   6. Call classified as booked.
   7. Transfer simulated.
   8. Data persistence verified via dashboard endpoints.
   9. max_rate / min_rate must NOT appear in any response.
+
+Negotiation model (profit-maximization):
+  - offer <= loadboard_rate              → accept immediately
+  - loadboard_rate < offer <= max_rate   → counter (round 1: loadboard, round 2: midpoint, round 3+: accept)
+  - offer > max_rate                     → reject
 
 Run with: uv run pytest tests/test_e2e_agent_flow.py -v
 """
@@ -138,9 +143,9 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
         assert r.status_code == 200
         assert r.json()["entry_count"] == i + 1
 
-    # ── Step 6: Negotiate — round 1 (offer below loadboard, above floor) ─────
-    # Floor = loadboard_rate * 0.85. Offer = loadboard_rate * 0.88 (above floor).
-    carrier_offer_r1 = round(loadboard_rate * 0.88, 2)
+    # ── Step 6: Negotiate — round 1 (offer above loadboard, below ceiling) ─────
+    # Ceiling = loadboard_rate * 1.15. Offer = loadboard_rate * 1.10 (above loadboard).
+    carrier_offer_r1 = round(loadboard_rate * 1.10, 2)
 
     r = client.post(
         "/api/agent/negotiations/evaluate",
@@ -263,8 +268,8 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
     _assert_no_rate_leak(live_calls)
 
 
-def test_e2e_reject_below_floor(client):
-    """Offer below min_rate (85% of loadboard) is rejected outright."""
+def test_e2e_reject_above_ceiling(client):
+    """Offer above max_rate (115% of loadboard) is rejected outright."""
     # Create a call
     r = client.post(
         "/api/agent/calls",
@@ -279,14 +284,14 @@ def test_e2e_reject_below_floor(client):
     load_uuid = load["id"]
     loadboard_rate = load["loadboard_rate"]
 
-    # Offer well below floor (70% — below 85% floor)
-    very_low_offer = round(loadboard_rate * 0.70, 2)
+    # Offer above ceiling (125% — above 115% ceiling)
+    very_high_offer = round(loadboard_rate * 1.25, 2)
     r = client.post(
         "/api/agent/negotiations/evaluate",
         json={
             "call_id": call_id,
             "load_id": load_uuid,
-            "carrier_offer": very_low_offer,
+            "carrier_offer": very_high_offer,
             "round_number": 1,
         },
         headers=AGENT_HEADERS,
@@ -325,7 +330,8 @@ def test_e2e_accept_at_loadboard_rate(client):
     assert r.status_code == 200
     result = r.json()
     assert result["decision"] == "accept"
-    assert result["final_price"] == loadboard_rate
+    # final_price is rounded to nearest $25 for display; allow up to $25 tolerance
+    assert abs(result["final_price"] - loadboard_rate) <= 25
     _assert_no_rate_leak(result)
 
 

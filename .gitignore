@@ -3,6 +3,7 @@
 .env.local
 .env.production
 .env.*
+.mcp.json
 
 # Claude
 CLAUDE.md
