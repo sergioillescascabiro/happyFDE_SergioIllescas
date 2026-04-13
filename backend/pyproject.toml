@@ -1,0 +1,26 @@
+[project]
+name = "happyfde-backend"
+version = "0.1.0"
+description = "HappyFDE Freight Brokerage Platform Backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "alembic",
+    "psycopg2-binary",
+    "pydantic",
+    "pydantic-settings",
+    "python-dotenv",
+    "httpx",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "httpx",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

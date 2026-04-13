@@ -1,0 +1,2 @@
+// HappyFDE type definitions
+export {};
