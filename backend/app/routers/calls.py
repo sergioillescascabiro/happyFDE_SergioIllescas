@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import datetime, timedelta
 import math
+import json
+import asyncio
 
-from app.database import get_db
+from app.database import get_db, SessionLocal
 from app.middleware.auth import require_dashboard_token
 from app.models.call import Call, CallOutcome, CallSentiment, CallDirection
 from app.models.carrier import Carrier
@@ -48,14 +52,30 @@ def _enrich(call: Call, db: Session) -> dict:
     return data
 
 
+def _enrich_as_json(call: Call, db: Session) -> dict:
+    """Same as _enrich but serializes datetimes for JSON/SSE transport."""
+    data = _enrich(call, db)
+    data["transcript_full"] = call.transcript_full
+    # Convert datetimes to ISO strings for JSON serialization
+    for key in ("call_start", "call_end", "created_at", "updated_at"):
+        if isinstance(data.get(key), datetime):
+            data[key] = data[key].isoformat()
+    return data
+
+
 @router.get("/live")
 def get_live_calls(
     db: Session = Depends(get_db),
     _: str = Depends(require_dashboard_token),
 ):
-    """Return recent calls for the live communications view (last 50, in_progress first)."""
+    """Return live and recent calls: in_progress OR started within the last 30 minutes."""
+    cutoff = datetime.utcnow() - timedelta(minutes=30)
     calls = (
         db.query(Call)
+        .filter(
+            (Call.outcome == CallOutcome.in_progress) |
+            (Call.call_start >= cutoff)
+        )
         .order_by(Call.call_start.desc())
         .limit(50)
         .all()
@@ -66,6 +86,53 @@ def get_live_calls(
         data["transcript_full"] = call.transcript_full
         result.append(data)
     return result
+
+
+@router.get("/live/stream")
+async def stream_live_calls(
+    request: Request,
+    _: str = Depends(require_dashboard_token),
+):
+    """SSE stream of live call updates. Sends a snapshot every 2 seconds.
+
+    Each event is a JSON array of calls that are in_progress or started
+    within the last 30 minutes. Connect with:
+        EventSource('/api/calls/live/stream', {headers: {'X-Dashboard-Token': '...'}})
+    """
+    async def event_generator():
+        while True:
+            if await request.is_disconnected():
+                break
+            db = SessionLocal()
+            try:
+                cutoff = datetime.utcnow() - timedelta(minutes=30)
+                calls = (
+                    db.query(Call)
+                    .filter(
+                        (Call.outcome == CallOutcome.in_progress) |
+                        (Call.call_start >= cutoff)
+                    )
+                    .order_by(Call.call_start.desc())
+                    .limit(20)
+                    .all()
+                )
+                payload = [_enrich_as_json(c, db) for c in calls]
+                yield f"data: {json.dumps(payload)}\n\n"
+            except Exception:
+                yield "data: []\n\n"
+            finally:
+                db.close()
+            await asyncio.sleep(2)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @router.get("", response_model=CallListResponse)

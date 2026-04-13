@@ -43,8 +43,10 @@ function LiveTab({ onPickUp }: { onPickUp: (msg: string) => void }) {
   }, []);
 
   useEffect(() => {
+    // Initial load
     fetchLive();
-    const interval = setInterval(fetchLive, 30000);
+    // Poll every 3 seconds for real-time updates
+    const interval = setInterval(fetchLive, 3000);
     return () => clearInterval(interval);
   }, [fetchLive]);
 
