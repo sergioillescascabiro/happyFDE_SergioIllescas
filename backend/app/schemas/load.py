@@ -118,8 +118,8 @@ class LoadResponse(BaseModel):
             "status": load.status,
             "created_at": load.created_at,
             "updated_at": load.updated_at,
-            "total_rate": round(load.loadboard_rate * load.miles, 2),
-            "per_mile_rate": round(load.loadboard_rate, 4),
+            "total_rate": round(load.loadboard_rate, 2),
+            "per_mile_rate": round(load.loadboard_rate / load.miles, 4) if load.miles > 0 else 0.0,
         }
         return cls(**data)
 
