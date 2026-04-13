@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware.auth import require_dashboard_token
+from app.routers import loads as loads_router
 
 app = FastAPI(title="HappyFDE API", version="0.1.0")
 
@@ -11,6 +12,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(loads_router.router)
 
 @app.get("/api/health")
 async def health():
