@@ -118,8 +118,7 @@ class TestLoadCreate:
             "delivery_datetime": (datetime.utcnow() + timedelta(days=5)).isoformat(),
             "equipment_type": "Dry Van",
             "loadboard_rate": 2.00,
-            "max_rate": 2.30,
-            "min_rate": 1.70,
+            "quoted_rate": 2.60,
             "weight": 25000,
             "commodity_type": "Test Goods",
             "miles": 800,
@@ -132,3 +131,7 @@ class TestLoadCreate:
         if r.status_code == 201:
             assert "max_rate" not in r.text
             assert "min_rate" not in r.text
+
+    def test_delivered_status_in_response(self, client):
+        r = client.get("/api/loads?status=delivered", headers=HEADERS)
+        assert r.status_code == 200  # valid status

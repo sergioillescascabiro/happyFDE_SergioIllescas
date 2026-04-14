@@ -144,8 +144,18 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
         assert r.json()["entry_count"] == i + 1
 
     # ── Step 6: Negotiate — round 1 (offer above loadboard, below ceiling) ─────
-    # Ceiling = loadboard_rate * 1.15. Offer = loadboard_rate * 1.10 (above loadboard).
-    carrier_offer_r1 = round(loadboard_rate * 1.10, 2)
+    # Fetch max_rate from DB (test-only: max_rate is never exposed via API).
+    # Use midpoint between loadboard and max_rate to ensure a valid counter range.
+    db = SessionLocal()
+    try:
+        _load = db.query(Load).filter(Load.id == load_uuid).first()
+        max_rate_raw = _load.max_rate
+    finally:
+        db.close()
+    # Offer is midpoint between loadboard and max_rate — always above loadboard, always below ceiling
+    carrier_offer_r1 = round((loadboard_rate + max_rate_raw) / 2 / 25) * 25
+    if carrier_offer_r1 <= loadboard_rate:
+        carrier_offer_r1 = loadboard_rate + 25  # ensure strictly above loadboard
 
     r = client.post(
         "/api/agent/negotiations/evaluate",

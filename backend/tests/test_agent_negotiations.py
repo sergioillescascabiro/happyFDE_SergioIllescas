@@ -3,14 +3,14 @@
 Seed data for load "202883":
   - equipment: Flatbed, miles: 410
   - loadboard_rate: 1075.0   (target price — total)
-  - max_rate:       1225.0   (ceiling — never exposed)
+  - max_rate:       1100.0   (ceiling = quoted_rate * 0.85, never exposed)
 
 Decision logic (broker profit-maximization):
-  - offer <= 1075.0              → accept immediately (carrier takes market rate or less)
-  - 1075.0 < offer <= 1225.0, round 1  → counter at loadboard_rate (rounded to nearest $25)
-  - 1075.0 < offer <= 1225.0, round 2  → counter at midpoint(loadboard_rate, offer)
-  - 1075.0 < offer <= 1225.0, round 3+ → accept at carrier_offer
-  - offer > 1225.0               → reject (above ceiling)
+  - offer <= loadboard_rate              → accept immediately
+  - loadboard_rate < offer <= max_rate, round 1  → counter at loadboard_rate
+  - loadboard_rate < offer <= max_rate, round 2  → counter at midpoint(loadboard_rate, offer)
+  - loadboard_rate < offer <= max_rate, round 3+ → accept at carrier_offer
+  - offer > max_rate                     → reject (above ceiling)
 """
 import uuid
 import pytest
@@ -28,7 +28,10 @@ AGENT_HEADERS = {"X-Agent-Key": AGENT_KEY}
 # Known values from seed data (computed deterministically with random.seed(42))
 LOAD_ID_HUMAN = "202883"  # load_id field (human-readable)
 LOADBOARD_RATE = 1075.0
-MAX_RATE = 1225.0  # ~114% of loadboard_rate (never exposed in responses)
+# max_rate is now quoted_rate * 0.85 — actual value from DB is 1100.0
+# Use a narrow offer above loadboard that stays below max_rate
+COUNTER_OFFER = 1090.0   # above loadboard (1075), below max_rate (1100)
+REJECT_OFFER = 1400.0    # well above max_rate (1100) — always reject
 
 # Cache resolved UUIDs
 _cache: dict = {}
@@ -132,7 +135,8 @@ def test_negotiate_counter_round1_above_loadboard(client):
     """Round 1 offer above loadboard_rate but below max_rate → counter at loadboard_rate."""
     load_uuid = get_load_uuid()
     call_id = create_test_call()
-    offer = round(LOADBOARD_RATE * 1.10, 2)  # ~1190.37 — above loadboard, below max_rate (1244.47)
+    # COUNTER_OFFER (1090) is above loadboard (1075) but below max_rate (1100)
+    offer = COUNTER_OFFER
 
     r = client.post(
         "/api/agent/negotiations/evaluate",
@@ -161,7 +165,7 @@ def test_negotiate_counter_round2_above_loadboard(client):
     """Round 2 offer above loadboard_rate but below max_rate → counter at midpoint."""
     load_uuid = get_load_uuid()
     call_id = create_test_call()
-    offer = round(LOADBOARD_RATE * 1.10, 2)  # ~1190.37
+    offer = COUNTER_OFFER  # 1090 — between loadboard (1075) and max_rate (1100)
 
     loadboard_rounded = round(LOADBOARD_RATE / 25) * 25
     raw_midpoint = (loadboard_rounded + offer) / 2
@@ -189,7 +193,7 @@ def test_negotiate_accept_round3_above_loadboard(client):
     """Round 3 offer above loadboard but below max_rate → accept at carrier's offer."""
     load_uuid = get_load_uuid()
     call_id = create_test_call()
-    offer = round(LOADBOARD_RATE * 1.10, 2)  # ~1190.37
+    offer = COUNTER_OFFER  # 1090 — between loadboard (1075) and max_rate (1100)
 
     r = client.post(
         "/api/agent/negotiations/evaluate",
@@ -213,7 +217,7 @@ def test_negotiate_reject_above_max_rate(client):
     """Offer above max_rate should be rejected regardless of round."""
     load_uuid = get_load_uuid()
     call_id = create_test_call()
-    offer = round(LOADBOARD_RATE * 1.20, 2)  # ~1298.58 — above max_rate (1244.47)
+    offer = REJECT_OFFER  # 1400 — well above max_rate (1100)
 
     r = client.post(
         "/api/agent/negotiations/evaluate",
@@ -287,8 +291,8 @@ def test_negotiate_get_history(client):
     load_uuid = get_load_uuid()
     call_id = create_test_call()
 
-    # Post two rounds with offer above loadboard (triggers counter both rounds)
-    offer = round(LOADBOARD_RATE * 1.10, 2)
+    # Post two rounds with offer above loadboard but below max_rate (triggers counter both rounds)
+    offer = COUNTER_OFFER  # 1090 — between loadboard (1075) and max_rate (1100)
     for rnd in [1, 2]:
         r = client.post(
             "/api/agent/negotiations/evaluate",
