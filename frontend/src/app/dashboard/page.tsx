@@ -75,7 +75,7 @@ export default function OverviewPage() {
         apiFetch<Shipper[]>('/api/shippers'),
         apiFetch<{ items: Load[] }>(`/api/loads?status=pending&page_size=20${selectedShipper !== 'all' ? `&shipper_id=${selectedShipper}` : ''}`),
         apiFetch<Quote[]>(`/api/quotes${selectedShipper !== 'all' ? `?shipper_id=${selectedShipper}` : ''}`),
-        apiFetch<{ items: Carrier[]; total: number }>('/api/carriers'),
+        apiFetch<Array<{ carrier: Carrier; booking_count: number }>>('/api/metrics/top-carriers?limit=5'),
       ]);
 
       // Also fetch covered loads
@@ -87,10 +87,8 @@ export default function OverviewPage() {
       setShippers(shippersData);
       setActiveLoads([...loadsData.items, ...coveredData.items].slice(0, 12));
       setQuotes(quotesData.slice(0, 8));
+      setTopCarriers(carriersData);
 
-      // Mock top carriers — use first 5 carriers with a fake count
-      const carriers = carriersData.items.filter(c => c.status === 'active').slice(0, 5);
-      setTopCarriers(carriers.map((c, i) => ({ carrier: c, booking_count: 15 - i * 2 })));
 
       setError('');
     } catch {

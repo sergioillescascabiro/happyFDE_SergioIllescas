@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import Optional, List
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.middleware.auth import require_dashboard_token
@@ -17,10 +17,8 @@ from app.schemas.load import (
 
 router = APIRouter(prefix="/api/loads", tags=["loads"])
 
-
 def _to_response(load: Load) -> LoadResponse:
     return LoadResponse.from_orm_with_computed(load)
-
 
 @router.get("", response_model=LoadListResponse)
 def list_loads(
@@ -36,7 +34,6 @@ def list_loads(
     _: str = Depends(require_dashboard_token),
 ):
     query = db.query(Load)
-
     if status:
         try:
             query = query.filter(Load.status == LoadStatus(status))
@@ -60,7 +57,7 @@ def list_loads(
 
     total = query.count()
     loads = query.order_by(Load.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
-
+    
     import math
     return LoadListResponse(
         items=[_to_response(l) for l in loads],
@@ -70,44 +67,42 @@ def list_loads(
         pages=math.ceil(total / page_size) if total > 0 else 0,
     )
 
-
 @router.get("/{load_id}", response_model=LoadDetailResponse)
 def get_load(
     load_id: str,
     db: Session = Depends(get_db),
     _: str = Depends(require_dashboard_token),
 ):
-    load = db.query(Load).filter(Load.load_id == load_id).first()
-    if not load:
-        # Try by UUID id as well
-        load = db.query(Load).filter(Load.id == load_id).first()
+    load = db.query(Load).filter((Load.load_id == load_id) | (Load.id == load_id)).first()
     if not load:
         raise HTTPException(404, f"Load {load_id} not found")
 
-    # Get recommended carriers via CarrierLoadHistory
+    origin_state = load.origin.split(",")[-1].strip() if "," in load.origin else ""
+    dest_state = load.destination.split(",")[-1].strip() if "," in load.destination else ""
+    
     history = (
         db.query(CarrierLoadHistory, Carrier)
         .join(Carrier, CarrierLoadHistory.carrier_id == Carrier.id)
-        .filter(CarrierLoadHistory.load_id == load.id)
+        .filter(CarrierLoadHistory.equipment_type == load.equipment_type)
+        .filter(CarrierLoadHistory.origin_region == origin_state)
+        .filter(CarrierLoadHistory.destination_region == dest_state)
         .order_by(CarrierLoadHistory.similar_match_count.desc())
         .limit(5)
         .all()
     )
 
-    rec_carriers = []
-    for hist, carrier in history:
-        rec_carriers.append(CarrierSummary(
-            id=carrier.id,
-            mc_number=carrier.mc_number,
-            legal_name=carrier.legal_name,
-            status=carrier.status.value,
-            similar_match_count=hist.similar_match_count,
-        ))
+    rec_carriers = [
+        CarrierSummary(
+            id=c.id,
+            mc_number=c.mc_number,
+            legal_name=c.legal_name,
+            status=c.status.value,
+            similar_match_count=h.similar_match_count,
+        ) for h, c in history
+    ]
 
     base = LoadResponse.from_orm_with_computed(load)
-    detail = LoadDetailResponse(**base.model_dump(), recommended_carriers=rec_carriers)
-    return detail
-
+    return LoadDetailResponse(**base.model_dump(), recommended_carriers=rec_carriers)
 
 @router.post("", response_model=LoadResponse, status_code=201)
 def create_load(
@@ -128,18 +123,17 @@ def create_load(
         **load_data,
         max_rate=max_rate,
         min_rate=min_rate,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(load)
 
     try:
-        db.flush()  # get load.id before creating quote
+        db.flush()
     except IntegrityError as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e.orig)}")
+        raise HTTPException(status_code=500, detail=str(e.orig))
 
-    # Auto-create quote linked to this load
     from app.models.quote import Quote, QuoteStatus
     quote = Quote(
         id=str(uuid.uuid4()),
@@ -159,10 +153,9 @@ def create_load(
         db.commit()
     except IntegrityError as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e.orig)}")
+        raise HTTPException(status_code=500, detail=str(e.orig))
     db.refresh(load)
     return _to_response(load)
-
 
 @router.patch("/{load_id}", response_model=LoadResponse)
 def update_load(
@@ -179,36 +172,28 @@ def update_load(
     for field, value in update_data.items():
         setattr(load, field, value)
 
-    # When transitioning to covered manually, compute margin if we have a quote
-    if update_data.get("status") == LoadStatusEnum.covered or update_data.get("status") == "covered":
+    if update_data.get("status") in [LoadStatusEnum.covered, "covered"]:
         if load.quote_id and load.booked_rate is None:
-            # Set booked_rate = loadboard_rate as default for manual bookings
             load.booked_rate = load.loadboard_rate
             load.is_ai_booked = False
-            if load.quote_id:
-                from app.models.quote import Quote
-                quote = db.query(Quote).filter(Quote.id == load.quote_id).first()
-                if quote and quote.quoted_rate:
-                    load.margin_pct = round(
-                        (quote.quoted_rate - load.booked_rate) / quote.quoted_rate * 100, 2
-                    )
+            from app.models.quote import Quote
+            quote = db.query(Quote).filter(Quote.id == load.quote_id).first()
+            if quote and quote.quoted_rate:
+                load.margin_pct = round((quote.quoted_rate - load.booked_rate) / quote.quoted_rate * 100, 2)
 
-    load.updated_at = datetime.utcnow()
+    load.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(load)
     return _to_response(load)
-
 
 @router.post("/refresh-status")
 def refresh_load_statuses(
     db: Session = Depends(get_db),
     _: str = Depends(require_dashboard_token),
 ):
-    """Refresh load statuses — marks covered loads as delivered if delivery_datetime has passed."""
     from app.services.load_service import refresh_delivered_status
     updated = refresh_delivered_status(db)
-    return {"updated": updated, "message": f"{updated} load(s) marked as delivered"}
-
+    return {"updated": updated, "message": f"{updated} load(s) updated"}
 
 @router.get("/{load_id}/carriers", response_model=List[CarrierSummary])
 def get_load_carriers(
@@ -220,10 +205,15 @@ def get_load_carriers(
     if not load:
         raise HTTPException(404, f"Load {load_id} not found")
 
+    origin_state = load.origin.split(",")[-1].strip() if "," in load.origin else ""
+    dest_state = load.destination.split(",")[-1].strip() if "," in load.destination else ""
+    
     history = (
         db.query(CarrierLoadHistory, Carrier)
         .join(Carrier, CarrierLoadHistory.carrier_id == Carrier.id)
-        .filter(CarrierLoadHistory.load_id == load.id)
+        .filter(CarrierLoadHistory.equipment_type == load.equipment_type)
+        .filter(CarrierLoadHistory.origin_region == origin_state)
+        .filter(CarrierLoadHistory.destination_region == dest_state)
         .order_by(CarrierLoadHistory.similar_match_count.desc())
         .all()
     )
@@ -237,7 +227,6 @@ def get_load_carriers(
         )
         for h, c in history
     ]
-
 
 @router.get("/{load_id}/calls")
 def get_load_calls(

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from app.models.load import Load, LoadStatus
 from app.models.call import Call, CallOutcome, CallSentiment
 from app.models.negotiation import Negotiation
@@ -35,7 +35,7 @@ def get_overview_metrics(db: Session, shipper_id: str = None) -> dict:
 
 
 def get_calls_over_time(db: Session, days: int = 30) -> list:
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
     calls = db.query(Call).filter(Call.call_start >= since).all()
 
     daily: dict = {}
@@ -173,3 +173,30 @@ def get_financial_metrics(db: Session) -> dict:
         "covered_load_count": total_covered,
         "ai_booked_count": ai_booked,
     }
+def get_top_carriers(db: Session, limit: int = 5) -> list:
+    """Gets carriers with the most successful bookings."""
+    from app.models.carrier import Carrier
+    
+    # Query carriers joined with calls that resulted in a booking
+    results = (
+        db.query(Carrier, func.count(Call.id).label("booking_count"))
+        .join(Call, Call.carrier_id == Carrier.id)
+        .filter(Call.outcome == CallOutcome.booked)
+        .group_by(Carrier.id)
+        .order_by(func.count(Call.id).desc())
+        .limit(limit)
+        .all()
+    )
+    
+    return [
+        {
+            "carrier": {
+                "id": c.id,
+                "mc_number": c.mc_number,
+                "legal_name": c.legal_name,
+                "status": c.status.value,
+            },
+            "booking_count": count
+        }
+        for c, count in results
+    ]
