@@ -57,9 +57,10 @@ def _get_available_load(client) -> dict:
         headers=AGENT_HEADERS,
     )
     assert r.status_code == 200, f"Load search failed: {r.text}"
-    loads = r.json()
-    assert loads, "No available Dry Van loads found — did you seed the DB?"
-    return loads[0]
+    load = r.json()
+    assert isinstance(load, dict), "Expected a single load object"
+    assert load.get("id"), "No available Dry Van loads found — did you seed the DB?"
+    return load
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -97,24 +98,19 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
     assert "message" in carrier_data
     _assert_no_rate_leak(carrier_data)
 
-    # ── Step 3: Search loads ─────────────────────────────────────────────────
+    # ── Step 3: Search loads (returns single best match by closest pickup) ───
     r = client.get(
         "/api/agent/loads/search",
         params={"equipment_type": "Dry Van"},
         headers=AGENT_HEADERS,
     )
     assert r.status_code == 200, f"Load search failed: {r.text}"
-    loads = r.json()
-    assert len(loads) > 0
-    _assert_no_rate_leak(loads)
+    chosen_load = r.json()
+    assert isinstance(chosen_load, dict), "Expected a single load object"
+    _assert_no_rate_leak(chosen_load)
+    assert "max_rate" not in chosen_load
+    assert "min_rate" not in chosen_load
 
-    # All returned loads are always available (filtered at query time — status field omitted)
-    for load in loads:
-        assert "max_rate" not in load
-        assert "min_rate" not in load
-
-    # Pick the first load
-    chosen_load = loads[0]
     load_uuid = chosen_load["id"]
     loadboard_rate = chosen_load["loadboard_rate"]
 
@@ -378,8 +374,9 @@ def test_e2e_no_rate_leak_anywhere(client):
     )
     _assert_no_rate_leak(r.json())
 
-    # Load search
+    # Load search (single object now)
     r = client.get("/api/agent/loads/search", headers=AGENT_HEADERS)
+    assert r.status_code == 200
     _assert_no_rate_leak(r.json())
 
     # Dashboard loads

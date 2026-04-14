@@ -1,4 +1,9 @@
-"""Tests for agent load search endpoint (Stage 2)."""
+"""Tests for agent load search endpoint (Stage 2).
+
+The endpoint now returns a single load object (best match by closest pickup
+date) instead of an array. This is intentional — HappyRobot tool nodes parse
+single objects correctly, while arrays cause {} output.
+"""
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,40 +20,32 @@ def client():
 
 
 def test_agent_load_search_no_filters(client):
-    """No filters: returns only available loads, max 20 results."""
+    """No filters: returns one available load (the soonest by pickup date)."""
     r = client.get("/api/agent/loads/search", headers=AGENT_HEADERS)
     assert r.status_code == 200
     data = r.json()
-    assert isinstance(data, list)
-    assert len(data) <= 20
-    assert len(data) > 0
-    # All returned loads must be available (only available loads are returned)
-    for item in data:
-        # The status field is NOT in AgentLoadResponse — that's intentional.
-        # Verify by checking that the known 20 available seed loads are represented.
-        assert "load_id" in item
-        assert "loadboard_rate" in item
-        assert "per_mile_rate" in item
+    assert isinstance(data, dict), "Expected a single object, not a list"
+    assert "load_id" in data
+    assert "loadboard_rate" in data
+    assert "per_mile_rate" in data
 
 
 def test_agent_load_search_by_origin(client):
-    """Filter by origin=Chicago returns loads from Chicago."""
-    r = client.get("/api/agent/loads/search?origin=Chicago", headers=AGENT_HEADERS)
+    """Filter by origin=Charlotte returns a load from Charlotte."""
+    r = client.get("/api/agent/loads/search?origin=Charlotte", headers=AGENT_HEADERS)
     assert r.status_code == 200
     data = r.json()
-    assert len(data) > 0
-    for item in data:
-        assert "Chicago" in item["origin"]
+    assert isinstance(data, dict)
+    assert "Charlotte" in data["origin"]
 
 
 def test_agent_load_search_by_equipment(client):
-    """Filter by equipment_type=Dry Van returns only Dry Van loads."""
+    """Filter by equipment_type=Dry Van returns a Dry Van load."""
     r = client.get("/api/agent/loads/search?equipment_type=Dry%20Van", headers=AGENT_HEADERS)
     assert r.status_code == 200
     data = r.json()
-    assert len(data) > 0
-    for item in data:
-        assert item["equipment_type"].lower() == "dry van"
+    assert isinstance(data, dict)
+    assert data["equipment_type"].lower() == "dry van"
 
 
 def test_agent_load_search_no_max_min_rate(client):
@@ -64,3 +61,13 @@ def test_agent_load_search_no_auth(client):
     """Missing X-Agent-Key should return 401."""
     r = client.get("/api/agent/loads/search")
     assert r.status_code == 401
+
+
+def test_agent_load_search_no_match(client):
+    """Impossible filter combo should return 404 with a clear message."""
+    r = client.get(
+        "/api/agent/loads/search?origin=Atlantis&destination=Mordor",
+        headers=AGENT_HEADERS,
+    )
+    assert r.status_code == 404
+    assert "No available loads" in r.json()["detail"]

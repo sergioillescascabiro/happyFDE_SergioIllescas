@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional
 from datetime import date, datetime
 
 from app.database import get_db
@@ -56,7 +56,7 @@ def _to_agent_load(load: Load) -> AgentLoadResponse:
     )
 
 
-@router.get("/search", response_model=List[AgentLoadResponse])
+@router.get("/search", response_model=AgentLoadResponse)
 def search_loads(
     origin: Optional[str] = Query(None),
     destination: Optional[str] = Query(None),
@@ -66,7 +66,12 @@ def search_loads(
     db: Session = Depends(get_db),
     _: str = Depends(require_agent_key),
 ):
-    """Search available loads. Only returns status=available loads. Max 20 results."""
+    """Search available loads and return the best match (closest pickup date).
+
+    Returns a single load object — the one with the earliest pickup_datetime
+    among all matches. If multiple loads share the same origin/destination,
+    the soonest one wins.
+    """
     query = db.query(Load).filter(Load.status == LoadStatus.available)
 
     if origin:
@@ -82,5 +87,13 @@ def search_loads(
         dt_to = datetime.combine(pickup_date_to, datetime.max.time())
         query = query.filter(Load.pickup_datetime <= dt_to)
 
-    loads = query.order_by(Load.pickup_datetime.asc()).limit(20).all()
-    return [_to_agent_load(l) for l in loads]
+    # Return only the best match: closest pickup date
+    best = query.order_by(Load.pickup_datetime.asc()).first()
+
+    if not best:
+        raise HTTPException(
+            status_code=404,
+            detail="No available loads match those criteria right now.",
+        )
+
+    return _to_agent_load(best)
