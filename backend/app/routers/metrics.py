@@ -61,3 +61,12 @@ def sentiment(
     _: str = Depends(require_dashboard_token),
 ):
     return get_sentiment_distribution(db)
+
+
+@router.get("/financial")
+def financial_metrics(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_dashboard_token),
+):
+    from app.services.metrics import get_financial_metrics
+    return get_financial_metrics(db)

@@ -120,3 +120,56 @@ def get_sentiment_distribution(db: Session) -> dict:
         k: {"count": v, "percentage": round(v / total * 100, 1) if total > 0 else 0}
         for k, v in dist.items()
     }
+
+
+def get_financial_metrics(db: Session) -> dict:
+    """Executive-level financial metrics."""
+    from app.models.quote import Quote, QuoteStatus
+
+    # All accepted quotes = revenue
+    accepted_quotes = db.query(Quote).filter(Quote.status == QuoteStatus.accepted).all()
+    total_revenue = round(sum(q.quoted_rate for q in accepted_quotes), 2)
+
+    # Covered and delivered loads with booked_rate set = carrier costs
+    covered_loads = (
+        db.query(Load)
+        .filter(Load.status.in_([LoadStatus.covered, LoadStatus.delivered]))
+        .filter(Load.booked_rate != None)
+        .all()
+    )
+    total_carrier_cost = round(sum(l.booked_rate for l in covered_loads), 2)
+    net_margin = round(total_revenue - total_carrier_cost, 2)
+
+    # Average spread %: average margin_pct across loads that have it
+    loads_with_margin = [l for l in covered_loads if l.margin_pct is not None]
+    avg_spread_pct = (
+        round(sum(l.margin_pct for l in loads_with_margin) / len(loads_with_margin), 2)
+        if loads_with_margin else 0.0
+    )
+
+    # Automation rate: % of covered loads booked by AI
+    total_covered = len(covered_loads)
+    ai_booked = sum(1 for l in covered_loads if l.is_ai_booked)
+    automation_rate = round(ai_booked / total_covered * 100, 1) if total_covered > 0 else 0.0
+
+    # Time-to-cover efficiency: avg hours from created_at to updated_at for covered/delivered loads
+    time_to_cover_hours = []
+    for l in covered_loads:
+        if l.created_at and l.updated_at and l.updated_at > l.created_at:
+            diff = (l.updated_at - l.created_at).total_seconds() / 3600
+            time_to_cover_hours.append(diff)
+    avg_time_to_cover_hours = (
+        round(sum(time_to_cover_hours) / len(time_to_cover_hours), 2)
+        if time_to_cover_hours else 0.0
+    )
+
+    return {
+        "total_revenue": total_revenue,
+        "total_carrier_cost": total_carrier_cost,
+        "net_margin": net_margin,
+        "avg_spread_pct": avg_spread_pct,
+        "automation_rate": automation_rate,
+        "avg_time_to_cover_hours": avg_time_to_cover_hours,
+        "covered_load_count": total_covered,
+        "ai_booked_count": ai_booked,
+    }
