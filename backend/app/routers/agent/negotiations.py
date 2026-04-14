@@ -82,6 +82,7 @@ def evaluate_negotiation(
     counter_offer = result.get("counter_offer")
     counter_offer_per_mile = result.get("counter_offer_per_mile")
     final_price = result.get("final_price")
+    warning = result.get("warning")  # internal flag (e.g. suspiciously_low_offer)
 
     # Map decision to NegotiationResponse enum value
     response_enum = {
@@ -101,12 +102,15 @@ def evaluate_negotiation(
         counter_offer=counter_offer,
         counter_offer_per_mile=counter_offer_per_mile,
         notes=result.get("message"),
+        warning=warning,
         created_at=datetime.utcnow(),
     )
     db.add(neg)
     db.commit()
 
-    return result
+    # Strip internal fields before sending response to agent
+    agent_response = {k: v for k, v in result.items() if k != "warning"}
+    return agent_response
 
 
 @router.get("/{call_id}", response_model=List[NegotiationRoundResponse])

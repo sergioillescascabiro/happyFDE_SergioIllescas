@@ -23,6 +23,7 @@ class Negotiation(Base):
     counter_offer: Mapped[float | None] = mapped_column(Float, nullable=True)
     counter_offer_per_mile: Mapped[float | None] = mapped_column(Float, nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    warning: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
     call: Mapped["Call"] = relationship("Call", backref="negotiations")

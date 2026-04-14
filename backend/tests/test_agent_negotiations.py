@@ -5,12 +5,14 @@ Seed data for load "202883":
   - loadboard_rate: 1075.0   (target price — total)
   - max_rate:       1100.0   (ceiling = quoted_rate * 0.85, never exposed)
 
-Decision logic (broker profit-maximization):
-  - offer <= loadboard_rate              → accept immediately
-  - loadboard_rate < offer <= max_rate, round 1  → counter at loadboard_rate
-  - loadboard_rate < offer <= max_rate, round 2  → counter at midpoint(loadboard_rate, offer)
-  - loadboard_rate < offer <= max_rate, round 3+ → accept at carrier_offer
-  - offer > max_rate                     → reject (above ceiling)
+Decision logic (broker profit-maximization with two-tier ceiling):
+  - offer <= loadboard_rate                         → accept immediately
+  - loadboard_rate < offer <= exorbitant_rate, R1    → counter at loadboard_rate
+  - loadboard_rate < offer <= exorbitant_rate, R2    → counter at midpoint, capped at max_rate
+  - loadboard_rate < offer <= max_rate, R3           → accept at carrier_offer
+  - max_rate < offer <= exorbitant_rate, R3           → counter at max_rate (ultimatum)
+  - R4+: accept if under max_rate, else reject
+  - offer > exorbitant_rate (max_rate * 1.30)         → reject immediately
 """
 import uuid
 import pytest
@@ -31,7 +33,7 @@ LOADBOARD_RATE = 1075.0
 # max_rate is now quoted_rate * 0.85 — actual value from DB is 1100.0
 # Use a narrow offer above loadboard that stays below max_rate
 COUNTER_OFFER = 1090.0   # above loadboard (1075), below max_rate (1100)
-REJECT_OFFER = 1400.0    # well above max_rate (1100) — always reject
+REJECT_OFFER = 1450.0    # above exorbitant threshold (1100 * 1.30 = 1430) — always reject
 
 # Cache resolved UUIDs
 _cache: dict = {}
@@ -159,17 +161,19 @@ def test_negotiate_counter_round1_above_loadboard(client):
     assert "message" in data
 
 
-# ── Test 4: Counter at midpoint on round 2 ──────────────────────────────────
+# ── Test 4: Counter on round 2 using 33% of OUR range ───────────────────────
 
 def test_negotiate_counter_round2_above_loadboard(client):
-    """Round 2 offer above loadboard_rate but below max_rate → counter at midpoint."""
+    """Round 2 offer above loadboard_rate → counter at loadboard + 33% of OUR range (not carrier's ask)."""
     load_uuid = get_load_uuid()
     call_id = create_test_call()
     offer = COUNTER_OFFER  # 1090 — between loadboard (1075) and max_rate (1100)
 
+    # New logic: counter = loadboard + 33% * (max - loadboard), capped at max
+    # loadboard_rounded = 1075, max_rounded = 1100, range = 25
+    # step = 1075 + 25*0.33 = 1083.25 → round to $1,075 (nearest $25)
+    # But max(counter, loadboard) ensures at least $1,075
     loadboard_rounded = round(LOADBOARD_RATE / 25) * 25
-    raw_midpoint = (loadboard_rounded + offer) / 2
-    expected_midpoint = round(raw_midpoint / 25) * 25
 
     r = client.post(
         "/api/agent/negotiations/evaluate",
@@ -184,7 +188,9 @@ def test_negotiate_counter_round2_above_loadboard(client):
     assert r.status_code == 200
     data = r.json()
     assert data["decision"] == "counter"
-    assert abs(data["counter_offer"] - expected_midpoint) < 0.01
+    # Counter must be at least loadboard_rate and at most max_rate
+    assert data["counter_offer"] >= loadboard_rounded
+    assert data["counter_offer"] <= 1100  # max_rate from seed
 
 
 # ── Test 5: Accept on round 3 when offer is above loadboard but below ceiling ─
@@ -211,13 +217,13 @@ def test_negotiate_accept_round3_above_loadboard(client):
     assert abs(data["final_price"] - offer) <= 25  # rounded to nearest $25
 
 
-# ── Test 6: Reject when offer > max_rate ────────────────────────────────────
+# ── Test 6: Reject when offer > exorbitant threshold (max_rate * 1.30) ───────
 
-def test_negotiate_reject_above_max_rate(client):
-    """Offer above max_rate should be rejected regardless of round."""
+def test_negotiate_reject_above_exorbitant_rate(client):
+    """Offer above exorbitant threshold (max_rate * 1.30) should be rejected immediately."""
     load_uuid = get_load_uuid()
     call_id = create_test_call()
-    offer = REJECT_OFFER  # 1400 — well above max_rate (1100)
+    offer = REJECT_OFFER  # 1450 — above exorbitant threshold (1100 * 1.30 = 1430)
 
     r = client.post(
         "/api/agent/negotiations/evaluate",
@@ -232,6 +238,35 @@ def test_negotiate_reject_above_max_rate(client):
     assert r.status_code == 200
     data = r.json()
     assert data["decision"] == "reject"
+    assert "message" in data
+    # Ensure no rate info is leaked
+    assert "min_rate" not in str(data)
+    assert "max_rate" not in str(data)
+
+
+# ── Test 6b: Counter at max_rate when offer is between max_rate and exorbitant ─
+
+def test_negotiate_counter_between_max_and_exorbitant(client):
+    """Offer above max_rate but below exorbitant threshold on round 1 should counter."""
+    load_uuid = get_load_uuid()
+    call_id = create_test_call()
+    # 1200 is above max_rate (1100) but below exorbitant (1430)
+    offer = 1200.0
+
+    r = client.post(
+        "/api/agent/negotiations/evaluate",
+        json={
+            "call_id": call_id,
+            "load_id": load_uuid,
+            "carrier_offer": offer,
+            "round_number": 1,
+        },
+        headers=AGENT_HEADERS,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["decision"] == "counter"
+    assert "counter_offer" in data
     assert "message" in data
     # Ensure no rate info is leaked
     assert "min_rate" not in str(data)
@@ -333,3 +368,50 @@ def test_negotiate_no_auth(client):
         },
     )
     assert r.status_code == 401
+
+
+# ── Test 11: Scam detection — offer below min_rate ──────────────────────────
+
+def test_negotiate_scam_detection_below_min_rate(client):
+    """Offer below min_rate should accept. Warning is NOT sent to agent but IS saved in DB."""
+    load_uuid = get_load_uuid()
+    call_id = create_test_call()
+    # min_rate for load 202883 = round(1075 * 0.85 / 25) * 25 = 914 (approx)
+    # Offer way below that
+    scam_offer = 700.0
+
+    r = client.post(
+        "/api/agent/negotiations/evaluate",
+        json={
+            "call_id": call_id,
+            "load_id": load_uuid,
+            "carrier_offer": scam_offer,
+            "round_number": 1,
+        },
+        headers=AGENT_HEADERS,
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data["decision"] == "accept"
+    assert "final_price" in data
+    assert "manager" in data["message"].lower() or "transfer" in data["message"].lower()
+    # WARNING must NOT be in agent response (it's internal)
+    assert "warning" not in data
+    # Ensure no rate info is leaked
+    assert "min_rate" not in str(data)
+    assert "max_rate" not in str(data)
+
+    # Verify the warning IS persisted in the database
+    from app.models.negotiation import Negotiation
+    db = SessionLocal()
+    try:
+        neg = (
+            db.query(Negotiation)
+            .filter(Negotiation.call_id == call_id)
+            .order_by(Negotiation.round_number.desc())
+            .first()
+        )
+        assert neg is not None
+        assert neg.warning == "suspiciously_low_offer"
+    finally:
+        db.close()

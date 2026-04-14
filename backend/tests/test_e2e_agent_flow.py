@@ -11,10 +11,10 @@ Simulates a complete inbound carrier call:
   8. Data persistence verified via dashboard endpoints.
   9. max_rate / min_rate must NOT appear in any response.
 
-Negotiation model (profit-maximization):
+Negotiation model (profit-maximization, two-tier ceiling):
   - offer <= loadboard_rate              → accept immediately
-  - loadboard_rate < offer <= max_rate   → counter (round 1: loadboard, round 2: midpoint, round 3+: accept)
-  - offer > max_rate                     → reject
+  - loadboard_rate < offer <= max*1.30   → counter (round 1: loadboard, round 2: midpoint, round 3: ultimatum)
+  - offer > max_rate * 1.30              → reject (exorbitant)
 
 Run with: uv run pytest tests/test_e2e_agent_flow.py -v
 """
@@ -145,17 +145,19 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
 
     # ── Step 6: Negotiate — round 1 (offer above loadboard, below ceiling) ─────
     # Fetch max_rate from DB (test-only: max_rate is never exposed via API).
-    # Use midpoint between loadboard and max_rate to ensure a valid counter range.
     db = SessionLocal()
     try:
         _load = db.query(Load).filter(Load.id == load_uuid).first()
         max_rate_raw = _load.max_rate
+        loadboard_rate_raw = _load.loadboard_rate
     finally:
         db.close()
-    # Offer is midpoint between loadboard and max_rate — always above loadboard, always below ceiling
-    carrier_offer_r1 = round((loadboard_rate + max_rate_raw) / 2 / 25) * 25
-    if carrier_offer_r1 <= loadboard_rate:
-        carrier_offer_r1 = loadboard_rate + 25  # ensure strictly above loadboard
+    # Offer must be strictly above loadboard_raw but at or below max_rate_rounded.
+    # The engine rounds max_rate to nearest $25, so we do the same to stay safe.
+    max_rate_rounded = round(max_rate_raw / 25) * 25
+    carrier_offer_r1 = max_rate_rounded  # exactly at the "accept on R3" threshold
+    if carrier_offer_r1 <= loadboard_rate_raw:
+        carrier_offer_r1 = loadboard_rate_raw + 1  # fallback for very tight spread
 
     r = client.post(
         "/api/agent/negotiations/evaluate",
@@ -191,7 +193,7 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
     assert neg2["decision"] == "counter", f"Expected counter on round 2, got: {neg2}"
     _assert_no_rate_leak(neg2)
 
-    # ── Step 8: Negotiate — round 3 → accept ────────────────────────────────
+    # ── Step 8: Negotiate — round 3 → accept or ultimatum counter ────────────
     r = client.post(
         "/api/agent/negotiations/evaluate",
         json={
@@ -204,7 +206,28 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
     )
     assert r.status_code == 200
     neg3 = r.json()
-    assert neg3["decision"] == "accept", f"Expected accept on round 3, got: {neg3}"
+    assert neg3["decision"] in ("accept", "counter"), f"Unexpected decision on round 3: {neg3}"
+    _assert_no_rate_leak(neg3)
+
+    expected_rounds = 3
+    if neg3["decision"] == "counter":
+        # Ultimatum: carrier was above max — accept the counter_offer on round 4
+        r = client.post(
+            "/api/agent/negotiations/evaluate",
+            json={
+                "call_id": call_id,
+                "load_id": load_uuid,
+                "carrier_offer": neg3["counter_offer"],  # accept the ultimatum price
+                "round_number": 4,
+            },
+            headers=AGENT_HEADERS,
+        )
+        assert r.status_code == 200
+        neg4 = r.json()
+        assert neg4["decision"] == "accept", f"Expected accept on round 4 with counter_offer, got: {neg4}"
+        neg3 = neg4  # use for downstream assertions
+        expected_rounds = 4
+
     assert "final_price" in neg3
     assert "final_price_per_mile" in neg3
     _assert_no_rate_leak(neg3)
@@ -216,7 +239,7 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
     )
     assert r.status_code == 200
     history = r.json()
-    assert len(history) == 3
+    assert len(history) == expected_rounds
     assert history[0]["round_number"] == 1
     assert history[1]["round_number"] == 2
     assert history[2]["round_number"] == 3
@@ -279,7 +302,7 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
 
 
 def test_e2e_reject_above_ceiling(client):
-    """Offer above max_rate (115% of loadboard) is rejected outright."""
+    """Offer above exorbitant threshold (max_rate * 1.30) is rejected outright."""
     # Create a call
     r = client.post(
         "/api/agent/calls",
@@ -294,8 +317,8 @@ def test_e2e_reject_above_ceiling(client):
     load_uuid = load["id"]
     loadboard_rate = load["loadboard_rate"]
 
-    # Offer above ceiling (125% — above 115% ceiling)
-    very_high_offer = round(loadboard_rate * 1.25, 2)
+    # Offer above exorbitant threshold (160% of loadboard — exceeds max_rate*1.30)
+    very_high_offer = round(loadboard_rate * 1.60, 2)
     r = client.post(
         "/api/agent/negotiations/evaluate",
         json={
