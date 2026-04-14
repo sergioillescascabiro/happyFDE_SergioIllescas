@@ -12,7 +12,7 @@ from app.models.carrier import Carrier, CarrierLoadHistory
 from app.models.call import Call
 from app.schemas.load import (
     LoadCreate, LoadUpdate, LoadResponse, LoadListResponse,
-    LoadDetailResponse, CarrierSummary
+    LoadDetailResponse, CarrierSummary, LoadStatusEnum
 )
 
 router = APIRouter(prefix="/api/loads", tags=["loads"])
@@ -119,14 +119,43 @@ def create_load(
     if existing:
         raise HTTPException(409, f"Load ID {payload.load_id} already exists")
 
+    max_rate = round(payload.quoted_rate * 0.85, 2)
+    min_rate = round(payload.loadboard_rate * 0.85, 2)
+
+    load_data = payload.model_dump(exclude={"quoted_rate"})
     load = Load(
         id=str(uuid.uuid4()),
-        **payload.model_dump(),
+        **load_data,
+        max_rate=max_rate,
+        min_rate=min_rate,
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
     )
     db.add(load)
+
     try:
+        db.flush()  # get load.id before creating quote
+    except IntegrityError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e.orig)}")
+
+    # Auto-create quote linked to this load
+    from app.models.quote import Quote, QuoteStatus
+    quote = Quote(
+        id=str(uuid.uuid4()),
+        shipper_id=load.shipper_id,
+        load_id=load.id,
+        origin=load.origin,
+        destination=load.destination,
+        equipment_type=load.equipment_type,
+        market_rate=round(load.loadboard_rate, 2),
+        quoted_rate=round(payload.quoted_rate, 2),
+        status=QuoteStatus.pending,
+    )
+    db.add(quote)
+    try:
+        db.flush()
+        load.quote_id = quote.id
         db.commit()
     except IntegrityError as e:
         db.rollback()
@@ -149,10 +178,36 @@ def update_load(
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(load, field, value)
+
+    # When transitioning to covered manually, compute margin if we have a quote
+    if update_data.get("status") == LoadStatusEnum.covered or update_data.get("status") == "covered":
+        if load.quote_id and load.booked_rate is None:
+            # Set booked_rate = loadboard_rate as default for manual bookings
+            load.booked_rate = load.loadboard_rate
+            load.is_ai_booked = False
+            if load.quote_id:
+                from app.models.quote import Quote
+                quote = db.query(Quote).filter(Quote.id == load.quote_id).first()
+                if quote and quote.quoted_rate:
+                    load.margin_pct = round(
+                        (quote.quoted_rate - load.booked_rate) / quote.quoted_rate * 100, 2
+                    )
+
     load.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(load)
     return _to_response(load)
+
+
+@router.post("/refresh-status")
+def refresh_load_statuses(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_dashboard_token),
+):
+    """Refresh load statuses — marks covered loads as delivered if delivery_datetime has passed."""
+    from app.services.load_service import refresh_delivered_status
+    updated = refresh_delivered_status(db)
+    return {"updated": updated, "message": f"{updated} load(s) marked as delivered"}
 
 
 @router.get("/{load_id}/carriers", response_model=List[CarrierSummary])

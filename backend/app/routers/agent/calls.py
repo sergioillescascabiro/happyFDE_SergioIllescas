@@ -230,12 +230,39 @@ def classify_call(
     call.duration_seconds = int((now - call.call_start).total_seconds())
     call.outcome = CallOutcome(payload.outcome)
 
-    # Auto-mark linked load as covered when call is booked
+    # Auto-mark linked load as covered when call is booked, set financial fields
     if payload.outcome == "booked" and call.load_id:
         from app.models.load import Load, LoadStatus
+        from app.models.negotiation import Negotiation, NegotiationResponse
+        from app.models.quote import Quote
         load = db.query(Load).filter(Load.id == call.load_id).first()
         if load and load.status == LoadStatus.available:
             load.status = LoadStatus.covered
+            load.is_ai_booked = True
+
+            # Get the final accepted negotiation price as booked_rate
+            last_accepted = (
+                db.query(Negotiation)
+                .filter(Negotiation.call_id == call.id)
+                .filter(Negotiation.system_response == NegotiationResponse.accept)
+                .order_by(Negotiation.round_number.desc())
+                .first()
+            )
+            if last_accepted:
+                load.booked_rate = last_accepted.carrier_offer
+            else:
+                # Fallback: use loadboard_rate as booked_rate
+                load.booked_rate = load.loadboard_rate
+
+            # Compute margin_pct using the linked quote's quoted_rate
+            if load.quote_id:
+                quote = db.query(Quote).filter(Quote.id == load.quote_id).first()
+                if quote and quote.quoted_rate and load.booked_rate:
+                    load.margin_pct = round(
+                        (quote.quoted_rate - load.booked_rate) / quote.quoted_rate * 100, 2
+                    )
+                    # Mark quote as accepted
+                    quote.status = "accepted"
 
     if payload.sentiment is not None:
         try:

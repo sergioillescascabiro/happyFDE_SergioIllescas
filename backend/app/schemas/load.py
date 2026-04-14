@@ -9,6 +9,7 @@ class LoadStatusEnum(str, Enum):
     pending = "pending"
     covered = "covered"
     cancelled = "cancelled"
+    delivered = "delivered"
 
 
 class LoadBase(BaseModel):
@@ -35,8 +36,7 @@ class LoadBase(BaseModel):
 
 
 class LoadCreate(LoadBase):
-    max_rate: float   # accepted on create but never returned
-    min_rate: float
+    quoted_rate: float  # what broker charges shipper — system derives max_rate from this
 
 
 class LoadUpdate(BaseModel):
@@ -89,6 +89,11 @@ class LoadResponse(BaseModel):
     # Computed fields — NEVER include max_rate or min_rate
     total_rate: float = 0.0
     per_mile_rate: float = 0.0
+    # Financial tracking fields (broker-visible)
+    booked_rate: Optional[float] = None
+    margin_pct: Optional[float] = None
+    is_ai_booked: bool = False
+    quote_id: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -120,6 +125,10 @@ class LoadResponse(BaseModel):
             "updated_at": load.updated_at,
             "total_rate": round(load.loadboard_rate, 2),
             "per_mile_rate": round(load.loadboard_rate / load.miles, 4) if load.miles > 0 else 0.0,
+            "booked_rate": load.booked_rate,
+            "margin_pct": load.margin_pct,
+            "is_ai_booked": load.is_ai_booked,
+            "quote_id": load.quote_id,
         }
         return cls(**data)
 
