@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import math
 import json
 import asyncio
@@ -69,7 +69,7 @@ def get_live_calls(
     _: str = Depends(require_dashboard_token),
 ):
     """Return live and recent calls: in_progress OR started within the last 30 minutes."""
-    cutoff = datetime.utcnow() - timedelta(minutes=30)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
     calls = (
         db.query(Call)
         .filter(
@@ -105,7 +105,7 @@ async def stream_live_calls(
                 break
             db = SessionLocal()
             try:
-                cutoff = datetime.utcnow() - timedelta(minutes=30)
+                cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
                 calls = (
                     db.query(Call)
                     .filter(

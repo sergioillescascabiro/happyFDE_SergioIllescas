@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from typing import Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timezone
 import uuid
 
 from app.database import get_db
@@ -120,7 +120,7 @@ def create_call(
         carrier_id=carrier.id,
         mc_number=mc,
         direction=direction_enum,
-        call_start=datetime.utcnow(),
+        call_start=datetime.now(timezone.utc),
         outcome=CallOutcome.in_progress,
         phone_number=payload.phone_number,
         happyrobot_call_id=payload.happyrobot_call_id,
@@ -225,7 +225,7 @@ def classify_call(
     if not call:
         raise HTTPException(status_code=404, detail=f"Call {call_id} not found")
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     call.call_end = now
     call.duration_seconds = int((now - call.call_start).total_seconds())
     call.outcome = CallOutcome(payload.outcome)
@@ -302,7 +302,7 @@ def append_transcript(
         raise HTTPException(status_code=404, detail=f"Call {call_id} not found")
 
     # Compute elapsed time since call_start
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     elapsed = int((now - call.call_start).total_seconds())
     hours = elapsed // 3600
     minutes = (elapsed % 3600) // 60

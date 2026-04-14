@@ -1,5 +1,5 @@
 """Load lifecycle service — status transitions and financial calculations."""
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from app.models.load import Load, LoadStatus
 
@@ -9,7 +9,7 @@ def refresh_delivered_status(db: Session) -> int:
 
     Returns the count of loads updated.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     covered_loads = (
         db.query(Load)
         .filter(Load.status == LoadStatus.covered)

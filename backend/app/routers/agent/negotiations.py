@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, model_validator
 from sqlalchemy.orm import Session
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 
 from app.database import get_db
@@ -103,7 +103,7 @@ def evaluate_negotiation(
         counter_offer_per_mile=counter_offer_per_mile,
         notes=result.get("message"),
         warning=warning,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     db.add(neg)
     db.commit()
