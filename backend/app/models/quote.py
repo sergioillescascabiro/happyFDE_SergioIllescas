@@ -1,9 +1,14 @@
+from __future__ import annotations
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 from sqlalchemy import String, Float, DateTime, Enum as SAEnum, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
+
+if TYPE_CHECKING:
+    from app.models.load import Load
 
 class QuoteStatus(str, enum.Enum):
     pending = "pending"
@@ -15,6 +20,7 @@ class Quote(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     shipper_id: Mapped[str] = mapped_column(String, ForeignKey("shippers.id"))
+    load_id: Mapped[str | None] = mapped_column(String, ForeignKey("loads.id"), nullable=True)
     origin: Mapped[str] = mapped_column(String)
     destination: Mapped[str] = mapped_column(String)
     equipment_type: Mapped[str] = mapped_column(String)
@@ -25,3 +31,4 @@ class Quote(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     shipper: Mapped["Shipper"] = relationship("Shipper", backref="quotes")
+    load: Mapped["Load"] = relationship("Load", back_populates="quote", foreign_keys=[load_id])

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import uuid
 from datetime import datetime
 from sqlalchemy import String, Float, Boolean, DateTime, Text, Integer, Enum as SAEnum, ForeignKey, func
@@ -10,6 +11,7 @@ class LoadStatus(str, enum.Enum):
     pending = "pending"
     covered = "covered"
     cancelled = "cancelled"
+    delivered = "delivered"
 
 class Load(Base):
     __tablename__ = "loads"
@@ -40,4 +42,11 @@ class Load(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
+    # Financial tracking fields
+    quote_id: Mapped[str | None] = mapped_column(String, ForeignKey("quotes.id", use_alter=True, name="fk_loads_quote_id"), nullable=True)
+    booked_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    margin_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    is_ai_booked: Mapped[bool] = mapped_column(Boolean, default=False)
+
     shipper: Mapped["Shipper"] = relationship("Shipper", backref="loads")
+    quote: Mapped["Quote"] = relationship("Quote", back_populates="load", foreign_keys="[Quote.load_id]", uselist=False)
