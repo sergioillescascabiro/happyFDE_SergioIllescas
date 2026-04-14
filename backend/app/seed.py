@@ -226,25 +226,26 @@ def seed_loads(db, shippers):
 
 
 def seed_carriers(db):
+    # All legal names verified against real FMCSA API (mc → verified legal name)
     carriers_data = [
-        ("98765",   "98765",  "HR Transportation",      None,                    "(312) 555-0111", "Chicago, IL",          True,  "Satisfactory", CarrierStatus.active,     CarrierSource.tms_import),
-        ("97531",   "97531",  "PP Trucking INC",         None,                    "(713) 555-0222", "Houston, TX",          True,  "Satisfactory", CarrierStatus.active,     CarrierSource.tms_import),
-        ("56789",   "56789",  "HappyTruckers INC",       "HappyTruck",            "(404) 555-0333", "Atlanta, GA",          True,  "Satisfactory", CarrierStatus.active,     CarrierSource.fmcsa),
-        ("13579",   "13579",  "RoboTruckers LLC",        None,                    "(214) 555-0444", "Dallas, TX",           True,  "Satisfactory", CarrierStatus.active,     CarrierSource.tms_import),
-        ("1431409", "1431409","Kaskad LLC",              None,                    "(773) 555-0555", "Chicago, IL",          True,  "Satisfactory", CarrierStatus.active,     CarrierSource.fmcsa),
-        ("1497140", "1497140","Kat Logistics LLC",       None,                    "(312) 555-0666", "Oak Park, IL",         False, None,           CarrierStatus.in_review,  CarrierSource.tms_import),
-        ("1523171", "1523171","Transportes Xela",        None,                    "(626) 555-0777", "El Monte, CA",         True,  "Satisfactory", CarrierStatus.active,     CarrierSource.fmcsa),
-        ("234567",  "234567", "Midwest Express",         "MWX",                   "(312) 555-0888", "Joliet, IL",           True,  "Satisfactory", CarrierStatus.active,     CarrierSource.tms_import),
-        ("345678",  "345678", "SunBelt Carriers",        None,                    "(602) 555-0999", "Phoenix, AZ",          True,  "Conditional",  CarrierStatus.active,     CarrierSource.fmcsa),
-        ("456789",  "456789", "Eagle Transport Co",      None,                    "(313) 555-1010", "Detroit, MI",          False, "Unsatisfactory",CarrierStatus.suspended, CarrierSource.manual),
-        ("567890",  "567890", "Pacific Coast Freight",   "PCF",                   "(503) 555-1111", "Portland, OR",         True,  "Satisfactory", CarrierStatus.active,     CarrierSource.tms_import),
-        ("678901",  "678901", "Great Plains Trucking",   None,                    "(402) 555-1212", "Omaha, NE",            True,  "Satisfactory", CarrierStatus.active,     CarrierSource.fmcsa),
-        ("789012",  "789012", "Coastal Logistics",       "CoastalLog",            "(904) 555-1313", "Jacksonville, FL",     True,  "Satisfactory", CarrierStatus.active,     CarrierSource.tms_import),
-        ("890123",  "890123", "Mountain West Carriers",  None,                    "(303) 555-1414", "Denver, CO",           True,  "Satisfactory", CarrierStatus.active,     CarrierSource.fmcsa),
-        ("901234",  "901234", "Northeast Express",       None,                    "(617) 555-1515", "Boston, MA",           True,  "Satisfactory", CarrierStatus.active,     CarrierSource.tms_import),
-        ("112233",  "112233", "Gulf Coast Transport",    None,                    "(504) 555-1616", "New Orleans, LA",      True,  "Satisfactory", CarrierStatus.active,     CarrierSource.fmcsa),
-        ("223344",  "223344", "Lone Star Freight",       "LSF",                   "(210) 555-1717", "San Antonio, TX",      True,  "Conditional",  CarrierStatus.active,     CarrierSource.tms_import),
-        ("334455",  "334455", "Appalachian Haulers",     None,                    "(423) 555-1818", "Knoxville, TN",        True,  "Satisfactory", CarrierStatus.inactive,   CarrierSource.manual),
+        ("98765",   "98765",   "DLP TRANSPORT LLC",                       None,     "(312) 555-0111", "Chicago, IL",          True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("97531",   "97531",   "KL2 TRANSPORT",                            None,     "(713) 555-0222", "Houston, TX",          True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("56789",   "56789",   "MARKS DISPATCH WESLEY MARKS",              None,     "(404) 555-0333", "Atlanta, GA",          True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("13579",   "13579",   "JEAR LOGISTICS LLC",                       None,     "(214) 555-0444", "Dallas, TX",           True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("1431409", "1431409", "KASKAD LLC",                               None,     "(773) 555-0555", "Chicago, IL",          True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("1497140", "1497140", "KAT LOGISTICS LLC",                        None,     "(312) 555-0666", "Oak Park, IL",         False, None,             CarrierStatus.in_review,  CarrierSource.fmcsa),
+        ("1523171", "1523171", "TRANSPORTES XELA LLC",                     None,     "(626) 555-0777", "El Monte, CA",         True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("234567",  "234567",  "KENT P HOLLENBECK",                        None,     "(312) 555-0888", "Joliet, IL",           True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("345678",  "345678",  "KAISER INDUSTRIAL & MARINE LTD",           None,     "(602) 555-0999", "Phoenix, AZ",          True,  "Conditional",    CarrierStatus.active,     CarrierSource.fmcsa),
+        ("456789",  "456789",  "MARK GINGRICH",                            None,     "(313) 555-1010", "Detroit, MI",          False, "Unsatisfactory", CarrierStatus.suspended,  CarrierSource.fmcsa),
+        ("567890",  "567890",  "DARRYL B PATE",                            None,     "(503) 555-1111", "Portland, OR",         True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("678901",  "678901",  "YUSIF GARIBA",                             None,     "(402) 555-1212", "Omaha, NE",            True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("789012",  "789012",  "9144-7680 QUEBEC INC",                     None,     "(904) 555-1313", "Jacksonville, FL",     True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("890123",  "890123",  "KAM XPRESS LLC",                           None,     "(303) 555-1414", "Denver, CO",           True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("901234",  "901234",  "ACME PALLET INC",                          None,     "(617) 555-1515", "Boston, MA",           True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("112233",  "112233",  "ENTERPRISE SOLUTIONS LLC",                 None,     "(504) 555-1616", "New Orleans, LA",      True,  "Satisfactory",   CarrierStatus.active,     CarrierSource.fmcsa),
+        ("223344",  "223344",  "SQUARE DEAL TRUCKING INC",                 None,     "(210) 555-1717", "San Antonio, TX",      True,  "Conditional",    CarrierStatus.active,     CarrierSource.fmcsa),
+        ("334455",  "334455",  "DOUBLE T EXPRESS PICKUP & DELIVERY INC",   None,     "(423) 555-1818", "Knoxville, TN",        True,  "Satisfactory",   CarrierStatus.inactive,   CarrierSource.fmcsa),
     ]
 
     carriers = []
@@ -268,6 +269,7 @@ def seed_carriers(db):
     db.add_all(carriers)
     db.commit()
     return {c.mc_number: c for c in carriers}
+
 
 
 def seed_carrier_load_history(db, carriers, loads):
@@ -497,37 +499,16 @@ def main():
 
         print("Seeding shippers...")
         shippers = seed_shippers(db)
-        print(f"  Created {len(shippers)} shippers")
 
         print("Seeding loads...")
-        loads = seed_loads(db, shippers)
-        print(f"  Created {len(loads)} loads")
+        seed_loads(db, shippers)
 
         print("Seeding carriers...")
-        carriers = seed_carriers(db)
-        print(f"  Created {len(carriers)} carriers")
+        seed_carriers(db)
 
-        print("Seeding carrier load history...")
-        seed_carrier_load_history(db, carriers, loads)
-        print("  Done")
-
-        print("Seeding calls and negotiations...")
-        seed_calls_and_negotiations(db, carriers, loads)
-        call_count = db.query(Call).count()
-        neg_count = db.query(Negotiation).count()
-        print(f"  Created {call_count} calls, {neg_count} negotiations")
-
-        print("\nSeed complete!")
-        print(f"  Shippers:    {db.query(Shipper).count()}")
-        print(f"  Loads:       {db.query(Load).count()}")
-        print(f"  Carriers:    {db.query(Carrier).count()}")
-        print(f"  CarrierHist: {db.query(CarrierLoadHistory).count()}")
-        print(f"  Calls:       {db.query(Call).count()}")
-        print(f"  Negs:        {db.query(Negotiation).count()}")
-        print(f"  Quotes:      {db.query(Quote).count()}")
+        print("\nSeed complete! (Clean environment)")
     finally:
         db.close()
-
 
 if __name__ == "__main__":
     main()

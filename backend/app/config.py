@@ -5,7 +5,6 @@ class Settings(BaseSettings):
     AGENT_API_KEY: str = "hr-agent-key-change-in-production"
     DASHBOARD_TOKEN: str = "hr-dashboard-token-change-in-production"
     FMCSA_API_KEY: str = ""
-    FMCSA_MOCK: bool = False
     APP_ENV: str = "development"
 
     class Config:
