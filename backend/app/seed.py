@@ -25,6 +25,10 @@ TODAY = datetime(2026, 4, 12, 12, 0, 0)
 
 def clear_db(db):
     """Clear all tables in correct order to respect FK constraints."""
+    from sqlalchemy import text
+    # Break circular FK: loads.quote_id → quotes.id
+    db.execute(text("UPDATE loads SET quote_id = NULL WHERE quote_id IS NOT NULL"))
+    db.commit()
     db.query(Negotiation).delete()
     db.query(Quote).delete()
     db.query(CarrierLoadHistory).delete()
@@ -92,7 +96,10 @@ def make_load(load_id, shipper, origin, destination, miles, equipment, commodity
     per_mile = round(random.uniform(lo, hi), 4)
     raw_rate = per_mile * miles
     loadboard_rate = round(raw_rate / 25) * 25  # round to nearest $25 — industry standard
-    max_rate = round(loadboard_rate * 1.15 / 25) * 25
+    # quoted_rate = broker charges shipper (20-30% markup)
+    markup = random.uniform(1.20, 1.30)
+    quoted_rate = round(loadboard_rate * markup / 25) * 25
+    max_rate = round(quoted_rate * 0.85 / 25) * 25
     min_rate = round(loadboard_rate * 0.85 / 25) * 25
 
     pickup_dt = TODAY + timedelta(days=pickup_offset_days)
@@ -118,7 +125,7 @@ def make_load(load_id, shipper, origin, destination, miles, equipment, commodity
         reference_id=ref_id or f"REF-{load_id}",
         dimensions=dimensions,
         status=status,
-    )
+    ), quoted_rate  # return quoted_rate separately for quote creation
 
 
 def seed_loads(db, shippers):
@@ -149,6 +156,7 @@ def seed_loads(db, shippers):
         ("202900", sysco,     "Dallas, TX",              "Oklahoma City, OK",      205,  "Reefer",   "Dairy Products",     38000, LoadStatus.available, 3),
         ("202901", homedepot, "Charlotte, NC",           "Baltimore, MD",          410,  "Flatbed",  "Steel Beams",        46000, LoadStatus.available, 12),
         ("202902", autozone,  "Portland, OR",            "Sacramento, CA",         580,  "Dry Van",  "Electronic Parts",   24000, LoadStatus.available, 8),
+        ("202915", homedepot, "Chicago, IL",             "St. Louis, MO",          300,  "Dry Van",  "Hardware",           31000, LoadStatus.available, 5),
         # Covered loads (5)
         ("202903", walmart,   "Louisville, KY",          "Indianapolis, IN",       115,  "Dry Van",  "Packaged Goods",     27000, LoadStatus.covered,   -2),
         ("202904", sysco,     "New Orleans, LA",         "Birmingham, AL",         345,  "Reefer",   "Seafood",            20000, LoadStatus.covered,   -1),
@@ -162,14 +170,57 @@ def seed_loads(db, shippers):
         # Cancelled loads (2)
         ("202911", autozone,  "Richmond, VA",            "Washington, DC",         110,  "Dry Van",  "Auto Parts",         19000, LoadStatus.cancelled, -5),
         ("202912", sysco,     "Fresno, CA",              "San Diego, CA",          330,  "Reefer",   "Perishables",        41000, LoadStatus.cancelled, -3),
+        # Delivered loads (2) - pickup was in the past, delivery is in the past
+        ("202913", walmart,   "Chicago, IL",             "Columbus, OH",           310,  "Dry Van",  "Consumer Goods",     28000, LoadStatus.delivered, -10),
+        ("202914", sysco,     "Atlanta, GA",             "Nashville, TN",          250,  "Reefer",   "Frozen Food",        35000, LoadStatus.delivered, -8),
     ]
 
     loads = []
+    quoted_rates = {}
     for row in loads_data:
-        l = make_load(*row)
-        loads.append(l)
+        load, qr = make_load(*row)
+        loads.append(load)
+        quoted_rates[load.load_id] = qr
 
     db.add_all(loads)
+    db.flush()  # get IDs
+
+    # Create quotes linked to loads
+    quotes = []
+    for load in loads:
+        qr = quoted_rates[load.load_id]
+        q_status = QuoteStatus.pending
+        if load.status in (LoadStatus.covered, LoadStatus.delivered):
+            q_status = QuoteStatus.accepted
+        elif load.status == LoadStatus.cancelled:
+            q_status = QuoteStatus.rejected
+        q = Quote(
+            id=str(uuid.uuid4()),
+            shipper_id=load.shipper_id,
+            load_id=load.id,
+            origin=load.origin,
+            destination=load.destination,
+            equipment_type=load.equipment_type,
+            market_rate=round(load.loadboard_rate, 2),
+            quoted_rate=round(qr, 2),
+            status=q_status,
+        )
+        quotes.append(q)
+
+    db.add_all(quotes)
+    db.flush()  # get quote IDs
+
+    # Link quote_id to each load, and for covered/delivered set financial fields
+    for load, quote in zip(loads, quotes):
+        load.quote_id = quote.id
+        if load.status in (LoadStatus.covered, LoadStatus.delivered):
+            # Simulate a booked_rate between min_rate and loadboard_rate
+            booked = round(random.uniform(load.min_rate, load.loadboard_rate) / 25) * 25
+            load.booked_rate = float(booked)
+            qr = quoted_rates[load.load_id]
+            load.margin_pct = round((qr - booked) / qr * 100, 2)
+            load.is_ai_booked = random.choice([True, False])
+
     db.commit()
     return {l.load_id: l for l in loads}
 
@@ -434,31 +485,8 @@ def seed_calls_and_negotiations(db, carriers, loads):
 
 
 def seed_quotes(db, shippers, loads):
-    """8-10 quotes for various shippers."""
-    load_list = list(loads.values())
-
-    quotes = []
-    for shipper in list(shippers.values()):
-        for _ in range(2):
-            load = random.choice(load_list)
-            market = round(load.loadboard_rate * random.uniform(0.95, 1.10), 2)
-            quoted = round(market * random.uniform(0.97, 1.03), 2)
-            status = random.choice([QuoteStatus.pending, QuoteStatus.accepted, QuoteStatus.rejected,
-                                     QuoteStatus.pending, QuoteStatus.accepted])
-            q = Quote(
-                id=str(uuid.uuid4()),
-                shipper_id=shipper.id,
-                origin=load.origin,
-                destination=load.destination,
-                equipment_type=load.equipment_type,
-                market_rate=market,
-                quoted_rate=quoted,
-                status=status,
-            )
-            quotes.append(q)
-
-    db.add_all(quotes)
-    db.commit()
+    """Legacy function — quotes are now auto-created in seed_loads. This is a no-op."""
+    pass
 
 
 def main():
@@ -488,11 +516,6 @@ def main():
         call_count = db.query(Call).count()
         neg_count = db.query(Negotiation).count()
         print(f"  Created {call_count} calls, {neg_count} negotiations")
-
-        print("Seeding quotes...")
-        seed_quotes(db, shippers, loads)
-        quote_count = db.query(Quote).count()
-        print(f"  Created {quote_count} quotes")
 
         print("\nSeed complete!")
         print(f"  Shippers:    {db.query(Shipper).count()}")
