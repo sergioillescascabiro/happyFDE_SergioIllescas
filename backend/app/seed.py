@@ -499,14 +499,34 @@ def main():
 
         print("Seeding shippers...")
         shippers = seed_shippers(db)
+        print(f"  Created {len(shippers)} shippers")
 
         print("Seeding loads...")
-        seed_loads(db, shippers)
+        loads = seed_loads(db, shippers)
+        print(f"  Created {len(loads)} loads")
 
         print("Seeding carriers...")
-        seed_carriers(db)
+        carriers = seed_carriers(db)
+        print(f"  Created {len(carriers)} carriers")
 
-        print("\nSeed complete! (Clean environment)")
+        print("Seeding carrier load history...")
+        seed_carrier_load_history(db, carriers, loads)
+        print("  Done")
+
+        print("Seeding calls and negotiations...")
+        seed_calls_and_negotiations(db, carriers, loads)
+        call_count = db.query(Call).count()
+        neg_count = db.query(Negotiation).count()
+        print(f"  Created {call_count} calls, {neg_count} negotiations")
+
+        print("\nSeed complete!")
+        print(f"  Shippers:    {db.query(Shipper).count()}")
+        print(f"  Loads:       {db.query(Load).count()}")
+        print(f"  Quotes:      {db.query(Quote).count()}")
+        print(f"  Carriers:    {db.query(Carrier).count()}")
+        print(f"  CarrierHist: {db.query(CarrierLoadHistory).count()}")
+        print(f"  Calls:       {db.query(Call).count()}")
+        print(f"  Negs:        {db.query(Negotiation).count()}")
     finally:
         db.close()
 

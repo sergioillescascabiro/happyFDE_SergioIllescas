@@ -28,6 +28,7 @@ class CallCreateRequest(BaseModel):
 
 
 class CallUpdateRequest(BaseModel):
+    mc_number: Optional[str] = None
     load_id: Optional[str] = None
     outcome: Optional[str] = None
     sentiment: Optional[str] = None
@@ -146,6 +147,23 @@ def update_call(
     if not call:
         raise HTTPException(status_code=404, detail=f"Call {call_id} not found")
 
+    if payload.mc_number is not None:
+        mc = payload.mc_number.strip()
+        carrier = db.query(Carrier).filter(Carrier.mc_number == mc).first()
+        if not carrier:
+            carrier = Carrier(
+                id=str(uuid.uuid4()),
+                mc_number=mc,
+                legal_name=f"Unknown Carrier MC#{mc}",
+                status=CarrierStatus.in_review,
+                source=CarrierSource.manual,
+                is_authorized=False,
+            )
+            db.add(carrier)
+            db.flush()
+        call.mc_number = mc
+        call.carrier_id = carrier.id
+
     if payload.load_id is not None:
         call.load_id = payload.load_id
 
@@ -227,7 +245,8 @@ def classify_call(
 
     now = datetime.now(timezone.utc)
     call.call_end = now
-    call.duration_seconds = int((now - call.call_start).total_seconds())
+    call_start = call.call_start.replace(tzinfo=timezone.utc) if call.call_start.tzinfo is None else call.call_start
+    call.duration_seconds = int((now - call_start).total_seconds())
     call.outcome = CallOutcome(payload.outcome)
 
     # Auto-mark linked load as covered when call is booked, set financial fields
@@ -303,7 +322,8 @@ def append_transcript(
 
     # Compute elapsed time since call_start
     now = datetime.now(timezone.utc)
-    elapsed = int((now - call.call_start).total_seconds())
+    call_start = call.call_start.replace(tzinfo=timezone.utc) if call.call_start.tzinfo is None else call.call_start
+    elapsed = int((now - call_start).total_seconds())
     hours = elapsed // 3600
     minutes = (elapsed % 3600) // 60
     seconds = elapsed % 60

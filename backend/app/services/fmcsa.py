@@ -55,6 +55,28 @@ def verify_carrier(mc_number: str, db: Session) -> dict:
     """
     carrier = db.query(Carrier).filter(Carrier.mc_number == mc_number).first()
 
+    # Mock mode: skip real API — MC ending in '0' is unauthorized, others authorized
+    if settings.FMCSA_MOCK:
+        is_authorized = not mc_number.endswith("0")
+        if carrier:
+            carrier.is_authorized = is_authorized
+            carrier.verification_date = datetime.now(timezone.utc)
+            db.commit()
+            db.refresh(carrier)
+            return _carrier_to_dict(carrier)
+        carrier = Carrier(
+            mc_number=mc_number,
+            legal_name=f"Mock Carrier MC#{mc_number}",
+            is_authorized=is_authorized,
+            status=CarrierStatus.active if is_authorized else CarrierStatus.in_review,
+            source=CarrierSource.fmcsa,
+            verification_date=datetime.now(timezone.utc),
+        )
+        db.add(carrier)
+        db.commit()
+        db.refresh(carrier)
+        return _carrier_to_dict(carrier)
+
     # Cache hit: verification_date within last 24 hours (DB stores naive UTC)
     if carrier and carrier.verification_date:
         now_naive = datetime.utcnow()
