@@ -66,6 +66,8 @@ class LoadResponse(BaseModel):
     id: str
     load_id: str
     shipper_id: str
+    shipper_name: Optional[str] = None
+    shipper_type: Optional[str] = None
     origin: str
     destination: str
     origin_lat: Optional[float] = None
@@ -103,6 +105,8 @@ class LoadResponse(BaseModel):
             "id": load.id,
             "load_id": load.load_id,
             "shipper_id": load.shipper_id,
+            "shipper_name": load.shipper.name if load.shipper else None,
+            "shipper_type": load.shipper.shipper_type if load.shipper else None,
             "origin": load.origin,
             "destination": load.destination,
             "origin_lat": load.origin_lat,

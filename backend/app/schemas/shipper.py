@@ -6,6 +6,7 @@ from datetime import datetime
 class ShipperResponse(BaseModel):
     id: str
     name: str
+    shipper_type: Optional[str] = None
     contact_name: str
     contact_email: str
     contact_phone: str

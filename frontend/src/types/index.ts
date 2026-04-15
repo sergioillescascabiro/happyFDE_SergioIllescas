@@ -9,6 +9,8 @@ export interface Load {
   id: string;
   load_id: string;
   shipper_id: string;
+  shipper_name?: string;
+  shipper_type?: string;
   origin: string;
   destination: string;
   origin_lat?: number;
@@ -116,6 +118,7 @@ export interface CallDetail extends Call {
 export interface Shipper {
   id: string;
   name: string;
+  shipper_type?: string;
   contact_name: string;
   contact_email: string;
   contact_phone: string;

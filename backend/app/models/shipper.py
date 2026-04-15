@@ -9,6 +9,7 @@ class Shipper(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String, unique=True)
+    shipper_type: Mapped[str | None] = mapped_column(String, nullable=True) # e.g. Retail, Manufacturing
     contact_name: Mapped[str] = mapped_column(String)
     contact_email: Mapped[str] = mapped_column(String)
     contact_phone: Mapped[str] = mapped_column(String)

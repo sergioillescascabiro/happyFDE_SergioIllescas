@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/agent/loads", tags=["agent-loads"])
 class AgentLoadResponse(BaseModel):
     id: str
     load_id: str
+    shipper_type: Optional[str] = None
     origin: str
     destination: str
     pickup_datetime: datetime
@@ -39,6 +40,7 @@ def _to_agent_load(load: Load) -> AgentLoadResponse:
     return AgentLoadResponse(
         id=load.id,
         load_id=load.load_id,
+        shipper_type=load.shipper.shipper_type if load.shipper else "General Cargo",
         origin=load.origin,
         destination=load.destination,
         pickup_datetime=load.pickup_datetime,
