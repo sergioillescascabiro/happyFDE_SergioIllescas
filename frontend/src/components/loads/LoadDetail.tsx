@@ -327,7 +327,6 @@ interface LoadDetailProps {
 
 export function LoadDetail({ load }: LoadDetailProps) {
   const [activeTab, setActiveTab] = useState<Tab>('booking');
-  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const TABS: { key: Tab; label: string }[] = [
     { key: 'booking', label: 'Booking' },
@@ -388,19 +387,15 @@ export function LoadDetail({ load }: LoadDetailProps) {
         <MetadataChip label="Reference ID" value={load.reference_id ?? '—'} />
       </div>
 
-      {/* Notes (collapsible) */}
+      {/* Notes (direct visibility) */}
       {load.notes && (
-        <div className="px-6 py-3 border-b border-[#2a2a2a] shrink-0">
-          <button
-            onClick={() => setNotesExpanded(!notesExpanded)}
-            className="flex items-center gap-2 text-xs text-[#666666] hover:text-white transition-colors w-full"
-          >
-            {notesExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            Notes
-          </button>
-          {notesExpanded && (
-            <p className="mt-2 text-sm text-[#888888] leading-relaxed">{load.notes}</p>
-          )}
+        <div className="px-8 py-5 border-b border-white/5 bg-amber-500/[0.02] shrink-0">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[9px] text-amber-500 font-bold uppercase tracking-[0.15em] font-heading">Special Instructions & Notes</span>
+          </div>
+          <p className="text-[13px] text-slate-300 leading-relaxed font-medium">
+            {load.notes}
+          </p>
         </div>
       )}
 
