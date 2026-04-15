@@ -1,33 +1,63 @@
-# HappyFDE — Freight Brokerage Operations Platform
+# HappyFDE — AI-Driven Freight Brokerage Platform
 
-Full-stack platform for the HappyRobot FDE Technical Challenge.
+Automate your inbound carrier sales with high-fidelity cargo intelligence and secure negotiation.
 
-## Quick Start
+## 🚀 Business Value Proposition
 
-### Prerequisites
-- Python 3.12+
-- Node.js 18+
-- Docker
-- uv (Python package manager): `pip install uv`
+HappyFDE bridges the gap between raw logistics data and profitable carrier negotiations. By integrating industry-standard cargo specifications with an advanced AI negotiation agent, the platform reduces operational overhead and maximizes spreads.
 
-### Database
-```bash
-docker run -d --name happyfde-db -p 5433:5432 -e POSTGRES_DB=happyrobot -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+### Key Operational Features
+- **Standardized Cargo Intelligence**: Automatic generation of industry-standard dimensions and operational notes (PPE requirements, FCFS rules).
+- **Executive Dashboard**: High-density UI for real-time monitoring of net profit, conversion rates, and automation efficiency.
+- **Strategic Privacy Guard**: Integrated "Shipper Category" pitching to prevent data leakage and protect broker-client relationships.
+- **Automated Negotiation**: Multi-round pricing logic optimized for maximum broker spread.
+
+---
+
+## 🏗️ System Architecture
+
+The solution is built on a modern, decoupled stack designed for scalability and high-availability deployment.
+
+```mermaid
+graph TD
+    subgraph "Frontend (Executive Interface)"
+        A[React/Vite Dashboard]
+    end
+    
+    subgraph "Backend (Logic Engine)"
+        B[FastAPI REST API]
+        C[AI Negotiation Service]
+        D[FMCSA Integration]
+    end
+    
+    subgraph "Data Store"
+        E[(PostgreSQL)]
+    end
+    
+    subgraph "External Systems"
+        F[HappyRobot Agent]
+        G[FMCSA Public Data]
+    end
+    
+    A <--> B
+    B <--> E
+    B <--> C
+    B <--> D
+    D <--> G
+    F <--> B
 ```
 
-### Backend
-```bash
-cd backend
-cp .env.example .env
-uv sync
-uv run alembic upgrade head
-uv run python -m app.seed
-uv run uvicorn app.main:app --reload --port 8000
-```
+### Deployment Strategy
+- **Infrastructure**: Containerized using Docker, deployed to Google Cloud Platform via Cloud Run.
+- **Data Persistence**: Secured using Cloud SQL (PostgreSQL).
+- **CI/CD**: Automated deployment pipelines through GitHub Actions.
 
-### Frontend
-```bash
-cd frontend
-npm install
-npm run dev
-```
+---
+
+## 📂 Project Organization
+- [Backend Codebase](./backend) — Logic, API, and Database models.
+- [Frontend Dashboard](./frontend) — React-based executive UI.
+- [Deployment Guide](./DEPLOYMENT.md) — Steps to reproduce the production build.
+
+---
+*Developed for the HappyRobot FDE Technical Challenge.*
