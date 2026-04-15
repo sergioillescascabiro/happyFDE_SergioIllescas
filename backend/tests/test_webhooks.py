@@ -193,7 +193,44 @@ def test_webhook_call_ended_not_found(client):
     assert r.status_code == 404
 
 
-# ── Test 5: Auth required ────────────────────────────────────────────────────
+# ── Test 5: partial transcript appends messages ──────────────────────────────
+
+def test_webhook_partial_transcript(client):
+    """POST partial-transcript → appends message to transcript_full."""
+    # Start the call
+    client.post(
+        "/api/webhooks/call-started",
+        json={"call_id": HR_CALL_ID_1, "timestamp": "2026-04-13T14:30:00Z"},
+        headers=AGENT_HEADERS,
+    )
+
+    # Message 1
+    client.post(
+        "/api/webhooks/partial-transcript",
+        json={"call_id": HR_CALL_ID_1, "role": "caller", "message": "First message"},
+        headers=AGENT_HEADERS,
+    )
+
+    # Message 2
+    client.post(
+        "/api/webhooks/partial-transcript",
+        json={"call_id": HR_CALL_ID_1, "role": "assistant", "message": "Second message"},
+        headers=AGENT_HEADERS,
+    )
+
+    # Verify in DB
+    db = SessionLocal()
+    try:
+        call = db.query(Call).filter(Call.happyrobot_call_id == HR_CALL_ID_1).first()
+        assert call is not None
+        assert len(call.transcript_full) == 2
+        assert call.transcript_full[0]["message"] == "First message"
+        assert call.transcript_full[1]["message"] == "Second message"
+    finally:
+        db.close()
+
+
+# ── Test 6: Auth required ────────────────────────────────────────────────────
 
 def test_webhooks_require_agent_key(client):
     """401 without X-Agent-Key header."""
