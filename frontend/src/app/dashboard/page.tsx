@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Package, PhoneCall, TrendingUp, DollarSign, RefreshCw, Truck, FileText, Bot } from 'lucide-react';
+import { Package, PhoneCall, TrendingUp, DollarSign, RefreshCw, Truck, FileText, Bot, Globe } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell,
@@ -275,7 +275,17 @@ export default function OverviewPage() {
 
       setMetrics(metricsData);
       setShippers(shippersData);
-      setActiveLoads([...loadsData.items, ...coveredData.items].slice(0, 12));
+      
+      const combinedActive = [...loadsData.items, ...coveredData.items]
+        .sort((a, b) => {
+          const priority = { pending: 1, covered: 2 };
+          const pa = priority[a.status as keyof typeof priority] || 99;
+          const pb = priority[b.status as keyof typeof priority] || 99;
+          if (pa !== pb) return pa - pb;
+          return new Date(a.pickup_datetime).getTime() - new Date(b.pickup_datetime).getTime();
+        });
+
+      setActiveLoads(combinedActive.slice(0, 12));
       setQuotes(quotesData.slice(0, 8));
       setTopCarriers(carriersData);
       setError('');
@@ -339,12 +349,21 @@ export default function OverviewPage() {
   if (loading && !metrics) return <PageLoader />;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-10 space-y-8 max-w-[1600px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-white tracking-tight">Executive Dashboard</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Freight Brokerage Performance & Lifecycle</p>
+        <div className="flex items-center gap-5">
+          <div className="p-3 bg-white/[0.03] rounded-2xl border border-white/10 shadow-inner">
+            <Globe className="w-6 h-6 text-emerald-400" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-heading font-bold text-emerald-500 uppercase tracking-[0.2em]">Acme Logistics</span>
+              <span className="text-[10px] text-slate-700 font-bold">•</span>
+              <span className="text-[10px] font-heading font-bold text-slate-500 uppercase tracking-[0.2em]">Operational Pulse</span>
+            </div>
+            <h1 className="text-3xl font-heading font-bold text-white tracking-tight mt-0.5">Executive Dashboard</h1>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {/* Shipper filter */}

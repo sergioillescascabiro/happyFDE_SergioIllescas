@@ -6,6 +6,7 @@ import { apiFetch } from '@/lib/api';
 import { Load, LoadListResponse, Shipper } from '@/types';
 import { LoadCard } from '@/components/loads/LoadCard';
 import { LoadDetail } from '@/components/loads/LoadDetail';
+import { clsx } from 'clsx';
 
 type FilterStatus = 'all' | 'available' | 'pending' | 'covered' | 'cancelled' | 'delivered';
 
@@ -253,8 +254,8 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-[#030303]/80 backdrop-filter blur-sm border-white/5 border flex items-center justify-center z-50 p-4">
-      <div className="glass-card rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in">
+    <div className="fixed inset-0 bg-[#000000]/80 flex items-center justify-center z-50 p-4">
+      <div className="bg-[#111111] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in">
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-5 border-b border-white/5">
           <div>
@@ -655,10 +656,19 @@ export default function LoadsPage() {
       if (search) params.set('search', search);
 
       const data = await apiFetch<LoadListResponse>(`/api/loads?${params}`);
-      setLoads(data.items);
+      
+      const sortedItems = [...data.items].sort((a, b) => {
+        const priority = { pending: 1, covered: 2 };
+        const pa = priority[a.status as keyof typeof priority] || 99;
+        const pb = priority[b.status as keyof typeof priority] || 99;
+        if (pa !== pb) return pa - pb;
+        return new Date(a.pickup_datetime).getTime() - new Date(b.pickup_datetime).getTime();
+      });
+
+      setLoads(sortedItems);
       setTotal(data.total);
-      if (!selectedLoad && data.items.length > 0) {
-        setSelectedLoad(data.items[0]);
+      if (!selectedLoad && sortedItems.length > 0) {
+        setSelectedLoad(sortedItems[0]);
       }
     } catch (e) {
       console.error(e);
@@ -720,16 +730,17 @@ export default function LoadsPage() {
           </div>
 
           {/* Status filter tabs */}
-          <div className="flex overflow-x-auto border-b border-[#2a2a2a] shrink-0">
+          <div className="flex flex-wrap gap-1 p-2 border-b border-white/5 bg-white/[0.01]">
             {STATUS_TABS.map(({ key, label }) => (
               <button
                 key={key}
                 onClick={() => setStatusFilter(key)}
-                className={`px-3 py-2 text-xs whitespace-nowrap transition-colors border-b-2 -mb-px ${
+                className={clsx(
+                  'px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider transition-all rounded-md',
                   statusFilter === key
-                    ? 'text-white border-white'
-                    : 'text-[#555555] border-transparent hover:text-[#888]'
-                }`}
+                    ? 'bg-emerald-500 text-[#030303] shadow-lg shadow-emerald-500/20'
+                    : 'text-slate-500 hover:text-slate-200 hover:bg-white/5'
+                )}
               >
                 {label}
               </button>
