@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import String, Float, Integer, DateTime, Enum as SAEnum, ForeignKey, func
+from sqlalchemy import String, Float, Integer, Boolean, DateTime, Enum as SAEnum, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
@@ -22,6 +22,9 @@ class Negotiation(Base):
     system_response: Mapped[NegotiationResponse] = mapped_column(SAEnum(NegotiationResponse))
     counter_offer: Mapped[float | None] = mapped_column(Float, nullable=True)
     counter_offer_per_mile: Mapped[float | None] = mapped_column(Float, nullable=True)
+    final_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    tone: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_final: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     notes: Mapped[str | None] = mapped_column(String, nullable=True)
     warning: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())

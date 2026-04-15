@@ -99,10 +99,10 @@ def test_negotiate_accept_at_or_above_loadboard_rate(client):
     data = r.json()
     assert data["decision"] == "accept"
     assert "final_price" in data
-    # final_price is rounded to nearest $25 for display; allow up to $25 tolerance
-    assert abs(data["final_price"] - LOADBOARD_RATE) <= 25
+    # final_price is smart-rounded: nearest $10 for values >= $1000
+    assert abs(data["final_price"] - LOADBOARD_RATE) <= 10
     assert "final_price_per_mile" in data
-    assert "message" in data
+    assert "message" not in data
 
 
 # ── Test 2: Accept immediately when offer < loadboard_rate ───────────────────
@@ -128,7 +128,7 @@ def test_negotiate_accept_below_loadboard_rate(client):
     assert data["decision"] == "accept"
     assert "final_price" in data
     assert "final_price_per_mile" in data
-    assert "message" in data
+    assert "message" not in data
 
 
 # ── Test 3: Counter on round 1 when offer is above loadboard but below ceiling ─
@@ -154,11 +154,15 @@ def test_negotiate_counter_round1_above_loadboard(client):
     data = r.json()
     assert data["decision"] == "counter"
     assert "counter_offer" in data
-    # counter is loadboard_rate rounded to nearest $25 = 1075
-    loadboard_rounded = round(LOADBOARD_RATE / 25) * 25
+    # counter is loadboard_rate smart-rounded: nearest $10 for values >= $1000
+    step = 5 if LOADBOARD_RATE < 1000 else 10
+    loadboard_rounded = round(LOADBOARD_RATE / step) * step
     assert abs(data["counter_offer"] - loadboard_rounded) < 0.01
     assert "counter_offer_per_mile" in data
-    assert "message" in data
+    assert "tone" in data
+    assert "is_final" in data
+    assert data["is_final"] is False
+    assert "message" not in data
 
 
 # ── Test 4: Counter on round 2 using 33% of OUR range ───────────────────────
@@ -214,7 +218,7 @@ def test_negotiate_accept_round3_above_loadboard(client):
     assert r.status_code == 200
     data = r.json()
     assert data["decision"] == "accept"
-    assert abs(data["final_price"] - offer) <= 25  # rounded to nearest $25
+    assert abs(data["final_price"] - offer) <= 10  # smart-rounded: nearest $10 for >= $1000
 
 
 # ── Test 6: Reject when offer > exorbitant threshold (max_rate * 1.30) ───────
@@ -238,7 +242,8 @@ def test_negotiate_reject_above_exorbitant_rate(client):
     assert r.status_code == 200
     data = r.json()
     assert data["decision"] == "reject"
-    assert "message" in data
+    assert "tone" in data
+    assert "message" not in data
     # Ensure no rate info is leaked
     assert "min_rate" not in str(data)
     assert "max_rate" not in str(data)
@@ -267,7 +272,8 @@ def test_negotiate_counter_between_max_and_exorbitant(client):
     data = r.json()
     assert data["decision"] == "counter"
     assert "counter_offer" in data
-    assert "message" in data
+    assert "tone" in data
+    assert "message" not in data
     # Ensure no rate info is leaked
     assert "min_rate" not in str(data)
     assert "max_rate" not in str(data)
@@ -296,9 +302,9 @@ def test_negotiate_per_mile_offer(client):
     assert r.status_code == 200
     data = r.json()
     # 410 * 2.60 = 1066 < 1075.0, so should accept
-    # final_price is rounded to nearest $25 for display; allow up to $25 tolerance
+    # final_price smart-rounded: 1066 >= 1000 → nearest $10 → 1070; tolerance $10
     assert data["decision"] == "accept"
-    assert abs(data["final_price"] - round(per_mile_offer * 410, 2)) <= 25
+    assert abs(data["final_price"] - round(per_mile_offer * 410, 2)) <= 10
 
 
 # ── Test 8: Missing both carrier_offer fields → 422 ─────────────────────────
@@ -394,7 +400,7 @@ def test_negotiate_scam_detection_below_min_rate(client):
     data = r.json()
     assert data["decision"] == "accept"
     assert "final_price" in data
-    assert "manager" in data["message"].lower() or "transfer" in data["message"].lower()
+    assert "message" not in data
     # WARNING must NOT be in agent response (it's internal)
     assert "warning" not in data
     # Ensure no rate info is leaked

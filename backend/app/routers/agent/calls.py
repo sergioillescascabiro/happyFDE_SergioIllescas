@@ -268,9 +268,9 @@ def classify_call(
                 .first()
             )
             if last_accepted:
-                load.booked_rate = last_accepted.carrier_offer
+                # Use final_price (smart-rounded) if available, else fall back to carrier_offer
+                load.booked_rate = last_accepted.final_price or last_accepted.carrier_offer
             else:
-                # Fallback: use loadboard_rate as booked_rate
                 load.booked_rate = load.loadboard_rate
 
             # Compute margin_pct using the linked quote's quoted_rate

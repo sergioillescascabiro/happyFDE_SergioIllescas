@@ -170,7 +170,8 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
     assert neg1["decision"] == "counter", f"Expected counter on round 1, got: {neg1}"
     assert "counter_offer" in neg1
     assert "counter_offer_per_mile" in neg1
-    assert "message" in neg1
+    assert "tone" in neg1
+    assert "is_final" in neg1
     _assert_no_rate_leak(neg1)
 
     # ── Step 7: Negotiate — round 2 ─────────────────────────────────────────

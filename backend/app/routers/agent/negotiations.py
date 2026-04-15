@@ -40,6 +40,9 @@ class NegotiationRoundResponse(BaseModel):
     system_response: str
     counter_offer: Optional[float] = None
     counter_offer_per_mile: Optional[float] = None
+    final_price: Optional[float] = None
+    tone: Optional[str] = None
+    is_final: Optional[bool] = None
     notes: Optional[str] = None
     created_at: datetime
 
@@ -82,7 +85,9 @@ def evaluate_negotiation(
     counter_offer = result.get("counter_offer")
     counter_offer_per_mile = result.get("counter_offer_per_mile")
     final_price = result.get("final_price")
-    warning = result.get("warning")  # internal flag (e.g. suspiciously_low_offer)
+    tone = result.get("tone")
+    is_final = result.get("is_final", False)
+    warning = result.get("warning")
 
     # Map decision to NegotiationResponse enum value
     response_enum = {
@@ -101,7 +106,9 @@ def evaluate_negotiation(
         system_response=response_enum,
         counter_offer=counter_offer,
         counter_offer_per_mile=counter_offer_per_mile,
-        notes=result.get("message"),
+        final_price=final_price,
+        tone=tone,
+        is_final=is_final,
         warning=warning,
         created_at=datetime.now(timezone.utc),
     )
@@ -138,6 +145,9 @@ def get_negotiation_history(
             system_response=n.system_response.value if hasattr(n.system_response, "value") else n.system_response,
             counter_offer=n.counter_offer,
             counter_offer_per_mile=n.counter_offer_per_mile,
+            final_price=n.final_price,
+            tone=n.tone,
+            is_final=n.is_final,
             notes=n.notes,
             created_at=n.created_at,
         )
