@@ -147,7 +147,7 @@ def update_call(
     if not call:
         raise HTTPException(status_code=404, detail=f"Call {call_id} not found")
 
-    if payload.mc_number is not None:
+    if payload.mc_number is not None and payload.mc_number.strip():
         mc = payload.mc_number.strip()
         carrier = db.query(Carrier).filter(Carrier.mc_number == mc).first()
         if not carrier:
