@@ -21,7 +21,13 @@ def test_overview_metrics(client):
 def test_calls_over_time(client):
     r = client.get("/api/metrics/calls-over-time", headers=HEADERS)
     assert r.status_code == 200
-    assert isinstance(r.json(), list)
+    data = r.json()
+    assert isinstance(data, list)
+    if data:
+        entry = data[0]
+        assert "date" in entry
+        assert "count" in entry
+        assert "booked_count" in entry
 
 def test_top_lanes(client):
     r = client.get("/api/metrics/top-lanes", headers=HEADERS)

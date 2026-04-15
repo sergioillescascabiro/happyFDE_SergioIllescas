@@ -63,6 +63,29 @@ def _enrich_as_json(call: Call, db: Session) -> dict:
     return data
 
 
+@router.post("/cleanup")
+def cleanup_stale_calls(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_dashboard_token),
+):
+    """Mark stale in_progress calls (older than 30 min) as cancelled."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=30)
+    stale_calls = (
+        db.query(Call)
+        .filter(Call.outcome == CallOutcome.in_progress)
+        .filter(Call.call_start < cutoff)
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    cancelled_ids = []
+    for call in stale_calls:
+        call.outcome = CallOutcome.cancelled
+        call.call_end = now
+        cancelled_ids.append(call.id)
+    db.commit()
+    return {"cancelled_count": len(cancelled_ids), "call_ids": cancelled_ids}
+
+
 @router.get("/live")
 def get_live_calls(
     db: Session = Depends(get_db),

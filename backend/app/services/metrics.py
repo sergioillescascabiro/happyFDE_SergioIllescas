@@ -42,10 +42,10 @@ def get_calls_over_time(db: Session, days: int = 30) -> list:
     for call in calls:
         day = call.call_start.strftime("%Y-%m-%d")
         if day not in daily:
-            daily[day] = {"date": day, "total": 0, "booked": 0, "no_agreement": 0}
-        daily[day]["total"] += 1
+            daily[day] = {"date": day, "count": 0, "booked_count": 0, "no_agreement": 0}
+        daily[day]["count"] += 1
         if call.outcome == CallOutcome.booked:
-            daily[day]["booked"] += 1
+            daily[day]["booked_count"] += 1
         elif call.outcome == CallOutcome.no_agreement:
             daily[day]["no_agreement"] += 1
 
@@ -100,11 +100,17 @@ def get_negotiation_analysis(db: Session) -> dict:
         call_rounds.setdefault(n.call_id, []).append(n)
     avg_rounds = round(sum(len(v) for v in call_rounds.values()) / len(call_rounds), 2)
 
+    accept_rate = round(accept / total * 100, 1)
+    counter_rate = round(counter / total * 100, 1)
+    reject_rate = round(reject / total * 100, 1)
+
     return {
         "avg_rounds": avg_rounds,
-        "accept_rate": round(accept / total * 100, 1),
-        "counter_rate": round(counter / total * 100, 1),
-        "reject_rate": round(reject / total * 100, 1),
+        "accept_rate": accept_rate,
+        "acceptance_rate": accept_rate,   # alias for frontend compatibility
+        "counter_rate": counter_rate,
+        "reject_rate": reject_rate,
+        "rejection_rate": reject_rate,    # alias for frontend compatibility
         "total_negotiations": total,
     }
 
@@ -163,11 +169,24 @@ def get_financial_metrics(db: Session) -> dict:
         if time_to_cover_hours else 0.0
     )
 
+    # avg_discount_pct: average of (loadboard_rate - booked_rate) / loadboard_rate * 100
+    # on covered/delivered loads where both rates are set
+    discount_pcts = []
+    for l in covered_loads:
+        if l.booked_rate is not None and l.loadboard_rate and l.loadboard_rate > 0:
+            disc = (l.loadboard_rate - l.booked_rate) / l.loadboard_rate * 100
+            discount_pcts.append(disc)
+    avg_discount_pct = (
+        round(sum(discount_pcts) / len(discount_pcts), 2)
+        if discount_pcts else 0.0
+    )
+
     return {
         "total_revenue": total_revenue,
         "total_carrier_cost": total_carrier_cost,
         "net_margin": net_margin,
         "avg_spread_pct": avg_spread_pct,
+        "avg_discount_pct": avg_discount_pct,
         "automation_rate": automation_rate,
         "avg_time_to_cover_hours": avg_time_to_cover_hours,
         "covered_load_count": total_covered,

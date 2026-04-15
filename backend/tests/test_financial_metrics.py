@@ -22,10 +22,19 @@ class TestFinancialMetrics:
         assert "total_revenue" in data
         assert "net_margin" in data
         assert "avg_spread_pct" in data
+        assert "avg_discount_pct" in data
         assert "automation_rate" in data
         assert "avg_time_to_cover_hours" in data
         assert "covered_load_count" in data
         assert "ai_booked_count" in data
+
+    def test_avg_discount_pct_is_numeric(self, client):
+        """avg_discount_pct must be a non-negative number."""
+        r = client.get("/api/metrics/financial", headers=HEADERS)
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data["avg_discount_pct"], (int, float))
+        assert data["avg_discount_pct"] >= 0
 
     def test_covered_loads_have_booked_rate(self, client):
         r = client.get("/api/loads?status=covered", headers=HEADERS)

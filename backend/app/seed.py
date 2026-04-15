@@ -325,8 +325,7 @@ def seed_calls_and_negotiations(db, carriers, loads):
         [(CallOutcome.rejected, CallSentiment.negative)] * 8 +
         [(CallOutcome.cancelled, CallSentiment.neutral)] * 5 +
         [(CallOutcome.carrier_not_authorized, CallSentiment.negative)] * 5 +
-        [(CallOutcome.transferred, CallSentiment.neutral)] * 3 +
-        [(CallOutcome.in_progress, CallSentiment.neutral)] * 2
+        [(CallOutcome.transferred, CallSentiment.neutral)] * 5
     )
     random.shuffle(call_templates)
 
@@ -408,8 +407,8 @@ def seed_calls_and_negotiations(db, carriers, loads):
 
         # Timing
         call_start = TODAY - timedelta(days=random.randint(0, 30), hours=random.randint(0, 23), minutes=random.randint(0, 59))
-        duration = random.randint(45, 420)
-        call_end = call_start + timedelta(seconds=duration) if outcome != CallOutcome.in_progress else None
+        duration = random.randint(120, 480)
+        call_end = call_start + timedelta(seconds=duration)
 
         # Summaries by outcome
         summaries = {
@@ -419,7 +418,6 @@ def seed_calls_and_negotiations(db, carriers, loads):
             CallOutcome.cancelled: f"Carrier disconnected before completing booking for load {load.load_id}.",
             CallOutcome.carrier_not_authorized: f"Carrier {carrier.mc_number} has suspended authority. Call terminated.",
             CallOutcome.transferred: f"Complex case transferred to human rep for load {load.load_id}.",
-            CallOutcome.in_progress: f"Call in progress. Carrier discussing load {load.load_id}.",
         }
 
         call = Call(
@@ -431,7 +429,7 @@ def seed_calls_and_negotiations(db, carriers, loads):
             direction=CallDirection.inbound,
             call_start=call_start,
             call_end=call_end,
-            duration_seconds=duration if call_end else None,
+            duration_seconds=duration,
             outcome=outcome,
             sentiment=sentiment,
             transcript_summary=summaries.get(outcome, ""),
