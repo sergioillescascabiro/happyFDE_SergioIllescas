@@ -58,6 +58,7 @@ def _to_agent_load(load: Load) -> AgentLoadResponse:
 
 @router.get("/search", response_model=AgentLoadResponse)
 def search_loads(
+    reference_id: Optional[str] = Query(None),
     origin: Optional[str] = Query(None),
     destination: Optional[str] = Query(None),
     equipment_type: Optional[str] = Query(None),
@@ -66,28 +67,32 @@ def search_loads(
     db: Session = Depends(get_db),
     _: str = Depends(require_agent_key),
 ):
-    """Search available loads and return the best match (closest pickup date).
+    """Find the best available load.
 
-    Returns a single load object — the one with the earliest pickup_datetime
-    among all matches. If multiple loads share the same origin/destination,
-    the soonest one wins.
+    Two modes (mutually exclusive — reference_id takes priority):
+    - By reference: pass reference_id to look up a specific posting.
+    - By lane: pass origin / destination / equipment_type for a fuzzy search;
+      returns the single best match (earliest pickup date).
     """
     query = db.query(Load).filter(Load.status == LoadStatus.available)
 
-    if origin:
-        query = query.filter(Load.origin.ilike(f"%{origin}%"))
-    if destination:
-        query = query.filter(Load.destination.ilike(f"%{destination}%"))
-    if equipment_type:
-        query = query.filter(Load.equipment_type.ilike(equipment_type))
-    if pickup_date_from:
-        dt_from = datetime.combine(pickup_date_from, datetime.min.time())
-        query = query.filter(Load.pickup_datetime >= dt_from)
-    if pickup_date_to:
-        dt_to = datetime.combine(pickup_date_to, datetime.max.time())
-        query = query.filter(Load.pickup_datetime <= dt_to)
+    if reference_id:
+        normalized = reference_id if reference_id.upper().startswith("REF-") else f"REF-{reference_id}"
+        query = query.filter(Load.reference_id == normalized)
+    else:
+        if origin:
+            query = query.filter(Load.origin.ilike(f"%{origin}%"))
+        if destination:
+            query = query.filter(Load.destination.ilike(f"%{destination}%"))
+        if equipment_type:
+            query = query.filter(Load.equipment_type.ilike(equipment_type))
+        if pickup_date_from:
+            dt_from = datetime.combine(pickup_date_from, datetime.min.time())
+            query = query.filter(Load.pickup_datetime >= dt_from)
+        if pickup_date_to:
+            dt_to = datetime.combine(pickup_date_to, datetime.max.time())
+            query = query.filter(Load.pickup_datetime <= dt_to)
 
-    # Return only the best match: closest pickup date
     best = query.order_by(Load.pickup_datetime.asc()).first()
 
     if not best:
