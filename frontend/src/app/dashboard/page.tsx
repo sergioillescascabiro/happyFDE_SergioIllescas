@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Package, PhoneCall, TrendingUp, DollarSign, RefreshCw, Truck, FileText, Bot, Globe } from 'lucide-react';
+import { Package, PhoneCall, TrendingUp, DollarSign, RefreshCw, Truck, FileText, Bot, Globe, Info } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell,
@@ -137,6 +137,24 @@ const RANGE_OPTIONS: { label: string; days: number }[] = [
 
 // ── Paul's Performance Card ───────────────────────────────────────────────────
 
+function Metric({ label, value, description, colorClass = 'text-white' }: { label: string; value: string | number; description: string; colorClass?: string }) {
+  return (
+    <div className="space-y-2 group/metric relative">
+      <div className="flex items-center gap-1.5">
+        <p className="text-[10px] text-slate-500 uppercase font-heading font-bold tracking-wider">{label}</p>
+        <div className="relative">
+          <Info className="w-2.5 h-2.5 text-slate-700 hover:text-emerald-400 cursor-help transition-colors" />
+          <div className="absolute bottom-full left-0 mb-2 w-48 p-2 bg-[#111111] border border-white/10 rounded-lg text-[10px] text-slate-400 font-medium leading-relaxed opacity-0 group-hover/metric:opacity-100 pointer-events-none transition-opacity z-50 shadow-2xl">
+            {description}
+            <div className="absolute top-full left-2 -mt-1 border-4 border-transparent border-t-[#111111]" />
+          </div>
+        </div>
+      </div>
+      <p className={clsx("text-4xl font-bold font-mono-data tracking-tighter", colorClass)}>{value}</p>
+    </div>
+  );
+}
+
 function PaulPerformanceCard({ data }: { data: AgentPerformance }) {
   const noData = data.ai.count === 0;
   const deltaPositive = data.margin_delta_pct >= 0;
@@ -159,18 +177,26 @@ function PaulPerformanceCard({ data }: { data: AgentPerformance }) {
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="text-right">
-              <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider">Automation</p>
+            <div className="text-right group/at relative">
+              <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider flex items-center justify-end gap-1">
+                Automation <Info className="w-2 h-2 text-slate-700" />
+              </p>
               <p className="text-sm font-mono-data text-white">{data.automation_rate.toFixed(1)}%</p>
+              <div className="absolute top-full right-0 mt-2 w-40 p-2 bg-[#111111] border border-white/10 rounded-lg text-[9px] text-slate-400 opacity-0 group-hover/at:opacity-100 pointer-events-none transition-opacity z-50 shadow-2xl">
+                Percentage of total freight volume handled autonomously by AI agents.
+              </div>
             </div>
             <div className="w-[1px] h-8 bg-white/10" />
-            <div className="text-right">
+            <div className="text-right group/md relative">
               <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider flex items-center justify-end gap-1">
-                vs Manual {deltaPositive ? <TrendingUp className="w-2.5 h-2.5 text-emerald-400" /> : null}
+                vs Manual <Info className="w-2 h-2 text-slate-700" />
               </p>
               <p className={`text-sm font-mono-data ${deltaPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
                 {deltaPositive ? '+' : ''}{data.margin_delta_pct.toFixed(1)}%
               </p>
+              <div className="absolute top-full right-0 mt-2 w-40 p-2 bg-[#111111] border border-white/10 rounded-lg text-[9px] text-slate-400 opacity-0 group-hover/md:opacity-100 pointer-events-none transition-opacity z-50 shadow-2xl">
+                The efficiency gap between AI negotiations and human operators.
+              </div>
             </div>
           </div>
         </div>
@@ -181,12 +207,13 @@ function PaulPerformanceCard({ data }: { data: AgentPerformance }) {
           </p>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            {/* Margin Achieved */}
             <div className="space-y-2">
-              <p className="text-[10px] text-slate-500 uppercase font-heading font-bold tracking-wider">Avg Margin</p>
-              <p className="text-4xl font-bold font-mono-data text-emerald-400 tracking-tighter">
-                {data.ai.avg_margin_pct.toFixed(1)}<span className="text-xl ml-0.5">%</span>
-              </p>
+              <Metric 
+                label="Avg Margin" 
+                value={`${data.ai.avg_margin_pct.toFixed(1)}%`} 
+                colorClass="text-emerald-400"
+                description="Average profit spread achieved by Paul across all automated bookings."
+              />
               <div className="mt-2 h-1 rounded-full bg-white/5 overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 rounded-full transition-all duration-1000"
@@ -195,35 +222,31 @@ function PaulPerformanceCard({ data }: { data: AgentPerformance }) {
               </div>
             </div>
 
-            {/* Loads Booked */}
-            <div className="space-y-2">
-              <p className="text-[10px] text-slate-500 uppercase font-heading font-bold tracking-wider">Total Booked</p>
-              <p className="text-4xl font-bold font-mono-data text-white tracking-tighter">{data.ai.count}</p>
-              <p className="text-[10px] text-slate-500 font-mono-data">
-                of {data.ai.count + data.manual.count} total
-              </p>
-            </div>
+            <Metric 
+              label="Total Booked" 
+              value={data.ai.count} 
+              description="Number of loads successfully negotiated and booked by the AI agent."
+            />
 
-            {/* Revenue */}
-            <div className="space-y-2">
-              <p className="text-[10px] text-slate-500 uppercase font-heading font-bold tracking-wider">Revenue</p>
-              <p className="text-4xl font-bold font-mono-data text-white tracking-tighter">
-                {formatCurrency(data.ai.total_booked_revenue)}
-              </p>
-              <p className="text-[10px] text-slate-500 font-mono-data">
-                avg {formatCurrency(data.ai.avg_booked_rate)}/load
-              </p>
-            </div>
+            <Metric 
+              label="Revenue" 
+              value={formatCurrency(data.ai.total_booked_revenue)} 
+              description="Gross revenue generated from shipments booked autonomously."
+            />
 
-            {/* Manual Comparison */}
-            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
-              <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider">Manual Performance</p>
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5 group/mp relative">
+              <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider flex items-center gap-1">
+                Manual Efficiency <Info className="w-2 h-2 text-slate-700" />
+              </p>
               <div className="flex items-center justify-between">
                 <p className="text-lg font-bold font-mono-data text-slate-300">{data.manual.avg_margin_pct.toFixed(1)}%</p>
                 <div className="text-[9px] text-slate-500 font-mono-data text-right">
                   {data.manual.count} loads<br />
                   {formatCurrency(data.manual.total_booked_revenue)}
                 </div>
+              </div>
+              <div className="absolute bottom-full left-0 mb-2 w-44 p-2 bg-[#111111] border border-white/10 rounded-lg text-[9px] text-slate-400 opacity-0 group-hover/mp:opacity-100 pointer-events-none transition-opacity z-50 shadow-2xl">
+                Performance baseline calculated from human operator bookings.
               </div>
             </div>
           </div>
@@ -400,6 +423,7 @@ export default function OverviewPage() {
             title="Total Loads"
             value={metrics.total_loads}
             icon={Package}
+            description="Cumulative volume of all freight shipments indexed in the platform."
           />
           <KPICard
             title="Active Loads"
@@ -407,6 +431,7 @@ export default function OverviewPage() {
             icon={TrendingUp}
             subtitle="Pending + Covered"
             valueClassName="text-amber-400"
+            description="Shipments currently in negotiation or booked but not yet delivered."
           />
           <KPICard
             title="Cargo Value"
@@ -414,6 +439,7 @@ export default function OverviewPage() {
             icon={DollarSign}
             subtitle="Across all loads"
             valueClassName="text-green-400"
+            description="Estimated total market value of all active freight being managed."
           />
           <KPICard
             title="Conversion Rate"
@@ -421,6 +447,7 @@ export default function OverviewPage() {
             icon={PhoneCall}
             subtitle={`${metrics.booked_calls} / ${metrics.total_calls} calls`}
             valueClassName={metrics.conversion_rate >= 30 ? 'text-green-400' : 'text-amber-400'}
+            description="Percentage of inbound carrier inquiries that result in a successful load booking."
           />
         </div>
       )}
