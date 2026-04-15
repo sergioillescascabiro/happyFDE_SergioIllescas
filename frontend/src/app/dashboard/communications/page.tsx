@@ -259,14 +259,18 @@ export default function CommunicationsPage() {
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-4">
-          <div className="p-2 bg-emerald-500/10 rounded-lg">
-            <MessageSquare className="w-5 h-5 text-emerald-400" />
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-5">
+          <div className="p-3 bg-white/[0.03] rounded-2xl border border-white/10 shadow-inner">
+            <MessageSquare className="w-6 h-6 text-emerald-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-heading font-bold text-white tracking-tight">Communication Logs</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Automated carrier negotiations & inquiry transcripts</p>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-heading font-bold text-emerald-500 uppercase tracking-[0.2em]">Acme Logistics</span>
+              <span className="text-[10px] text-slate-700 font-bold">•</span>
+              <span className="text-[10px] font-heading font-bold text-slate-500 uppercase tracking-[0.2em]">Communication Logs</span>
+            </div>
+            <h1 className="text-3xl font-heading font-bold text-white tracking-tight mt-0.5">Interaction History</h1>
           </div>
         </div>
       </div>
