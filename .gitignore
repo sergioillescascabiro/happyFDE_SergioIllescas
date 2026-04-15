@@ -41,3 +41,15 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Terraform / GCP Infrastructure
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+terraform.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info

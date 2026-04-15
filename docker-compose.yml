@@ -1,0 +1,51 @@
+services:
+  # Database
+  db:
+    image: postgres:16-alpine
+    container_name: happyfde-db
+    environment:
+      POSTGRES_DB: happyrobot
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432" # Keep the same port for local dev compatibility
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build: ./backend
+    container_name: happyfde-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/happyrobot
+      - AGENT_API_KEY=hr-agent-key-change-in-production
+      - DASHBOARD_TOKEN=hr-dashboard-token-change-in-production
+      - FMCSA_MOCK=false
+      - APP_ENV=production
+    ports:
+      - "8000:8000"
+
+  # Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000 # Client-side calls point to the mapped port
+    container_name: happyfde-front
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  pgdata:

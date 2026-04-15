@@ -248,7 +248,7 @@ function AllCallsTab() {
 }
 
 export default function CommunicationsPage() {
-  const [activeTab, setActiveTab] = useState<MainTab>('live');
+  const [activeTab, setActiveTab] = useState<MainTab>('all');
   const [toast, setToast] = useState('');
 
   const showToast = (msg: string) => {
@@ -278,8 +278,8 @@ export default function CommunicationsPage() {
       {/* Main tabs */}
       <div className="flex border-b border-[#2a2a2a] gap-0">
         {[
-          { key: 'live' as MainTab, label: 'Live Communications' },
           { key: 'all' as MainTab, label: 'All Communications' },
+          { key: 'live' as MainTab, label: 'Live Communications' },
         ].map(({ key, label }) => (
           <button
             key={key}
