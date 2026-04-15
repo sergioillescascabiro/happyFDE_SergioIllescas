@@ -192,6 +192,45 @@ def get_financial_metrics(db: Session) -> dict:
         "covered_load_count": total_covered,
         "ai_booked_count": ai_booked,
     }
+def get_agent_performance(db: Session) -> dict:
+    """Compare Paul (AI agent) vs manual bookings on margin."""
+    covered_loads = (
+        db.query(Load)
+        .filter(Load.status.in_([LoadStatus.covered, LoadStatus.delivered]))
+        .filter(Load.booked_rate != None)
+        .all()
+    )
+
+    ai_loads = [l for l in covered_loads if l.is_ai_booked]
+    manual_loads = [l for l in covered_loads if not l.is_ai_booked]
+
+    def stats(loads):
+        if not loads:
+            return {"count": 0, "avg_margin_pct": 0.0, "total_booked_revenue": 0.0, "avg_booked_rate": 0.0}
+        margins = [l.margin_pct for l in loads if l.margin_pct is not None]
+        return {
+            "count": len(loads),
+            "avg_margin_pct": round(sum(margins) / len(margins), 2) if margins else 0.0,
+            "total_booked_revenue": round(sum(l.booked_rate for l in loads), 2),
+            "avg_booked_rate": round(sum(l.booked_rate for l in loads) / len(loads), 2),
+        }
+
+    ai_stats = stats(ai_loads)
+    manual_stats = stats(manual_loads)
+    delta = round(ai_stats["avg_margin_pct"] - manual_stats["avg_margin_pct"], 2)
+
+    total_covered = len(covered_loads)
+    automation_rate = round(len(ai_loads) / total_covered * 100, 1) if total_covered > 0 else 0.0
+
+    return {
+        "agent_name": "Paul",
+        "ai": ai_stats,
+        "manual": manual_stats,
+        "margin_delta_pct": delta,
+        "automation_rate": automation_rate,
+    }
+
+
 def get_outcome_distribution(db: Session) -> list:
     calls = db.query(Call).all()
     dist: dict = {}

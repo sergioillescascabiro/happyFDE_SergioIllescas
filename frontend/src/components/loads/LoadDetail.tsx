@@ -106,6 +106,16 @@ function BookingTab({ load }: { load: Load }) {
 
   return (
     <div className="space-y-6">
+      {/* Rate reference for broker */}
+      <div className="text-xs text-[#555555] font-mono-data flex items-center gap-2 bg-[#0d1017] border border-[#2a2d3a] rounded-md px-3 py-2">
+        <span className="text-[#888888]">Loadboard:</span>
+        <span className="text-white">${load.total_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+        <span className="text-[#444]">·</span>
+        <span className="text-green-400">${load.per_mile_rate.toFixed(2)}/mi</span>
+        <span className="text-[#444]">·</span>
+        <span>{load.miles.toFixed(0)} mi</span>
+      </div>
+
       {/* Recommended Carriers */}
       <div>
         <div className="flex items-center justify-between mb-3">
@@ -358,10 +368,12 @@ export function LoadDetail({ load }: LoadDetailProps) {
       </div>
 
       {/* Metadata row */}
-      <div className="px-6 py-3 border-b border-[#2a2a2a] grid grid-cols-4 gap-3 shrink-0">
+      <div className="px-6 py-3 border-b border-[#2a2a2a] grid grid-cols-3 md:grid-cols-6 gap-3 shrink-0">
         <MetadataChip label="Equipment" value={load.equipment_type} />
         <MetadataChip label="Commodity" value={load.commodity_type} />
         <MetadataChip label="Weight" value={`${(load.weight / 1000).toFixed(0)}K lbs`} />
+        <MetadataChip label="Pieces" value={load.num_of_pieces} />
+        <MetadataChip label="Dimensions" value={load.dimensions ?? '—'} />
         <MetadataChip label="Ref ID" value={load.reference_id ?? '—'} />
       </div>
 

@@ -203,6 +203,14 @@ export interface SentimentDistribution {
   negative: { count: number; percentage: number };
 }
 
+export interface AgentPerformance {
+  agent_name: string;
+  ai: { count: number; avg_margin_pct: number; total_booked_revenue: number; avg_booked_rate: number };
+  manual: { count: number; avg_margin_pct: number; total_booked_revenue: number; avg_booked_rate: number };
+  margin_delta_pct: number;
+  automation_rate: number;
+}
+
 export interface FinancialMetrics {
   total_revenue: number;
   total_carrier_cost: number;

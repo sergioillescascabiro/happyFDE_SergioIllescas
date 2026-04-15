@@ -57,6 +57,29 @@ class TestFinancialMetrics:
         data = r.json()
         assert "updated" in data
 
+    def test_agent_performance_requires_auth(self, client):
+        r = client.get("/api/metrics/agent-performance")
+        assert r.status_code == 401
+
+    def test_agent_performance_structure(self, client):
+        r = client.get("/api/metrics/agent-performance", headers=HEADERS)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["agent_name"] == "Paul"
+        assert "ai" in data
+        assert "manual" in data
+        assert "margin_delta_pct" in data
+        assert "automation_rate" in data
+        for key in ("count", "avg_margin_pct", "total_booked_revenue", "avg_booked_rate"):
+            assert key in data["ai"]
+            assert key in data["manual"]
+
+    def test_agent_performance_automation_rate_bounds(self, client):
+        r = client.get("/api/metrics/agent-performance", headers=HEADERS)
+        assert r.status_code == 200
+        data = r.json()
+        assert 0.0 <= data["automation_rate"] <= 100.0
+
     def test_quoted_rate_not_in_load_response(self, client):
         """quoted_rate must never appear in load responses (broker-only data in Quote)"""
         r = client.get("/api/loads", headers=HEADERS)

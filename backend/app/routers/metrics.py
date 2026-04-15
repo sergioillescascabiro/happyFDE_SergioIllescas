@@ -70,6 +70,15 @@ def financial_metrics(
 ):
     from app.services.metrics import get_financial_metrics
     return get_financial_metrics(db)
+@router.get("/agent-performance")
+def agent_performance(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_dashboard_token),
+):
+    from app.services.metrics import get_agent_performance
+    return get_agent_performance(db)
+
+
 @router.get("/outcome-distribution")
 def outcome_distribution(
     db: Session = Depends(get_db),

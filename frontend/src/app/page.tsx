@@ -106,11 +106,11 @@ export default function TokenGate() {
           <button
             type="submit"
             disabled={loading || !token.trim()}
-            className="w-full bg-white text-black font-semibold py-3 rounded-md text-sm hover:bg-[#e5e5e5] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full bg-[#10b981] hover:bg-[#0d9668] text-white font-medium py-3 rounded-md text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 Connecting...
               </span>
             ) : (

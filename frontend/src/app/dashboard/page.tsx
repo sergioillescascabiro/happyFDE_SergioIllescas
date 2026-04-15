@@ -1,15 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Package, PhoneCall, TrendingUp, DollarSign, RefreshCw } from 'lucide-react';
+import { Package, PhoneCall, TrendingUp, DollarSign, RefreshCw, Truck, FileText, Bot } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   PieChart, Pie, Cell,
 } from 'recharts';
-import { apiFetch, getCallsOverTime, getOutcomeDistribution, getNegotiationAnalysis, getSentimentDistribution } from '@/lib/api';
+import { apiFetch, getCallsOverTime, getOutcomeDistribution, getNegotiationAnalysis, getSentimentDistribution, getAgentPerformance } from '@/lib/api';
 import {
   MetricsOverview, Shipper, Load, Quote, Carrier,
-  CallsOverTimePoint, OutcomeDistribution, NegotiationAnalysis, SentimentDistribution,
+  CallsOverTimePoint, OutcomeDistribution, NegotiationAnalysis, SentimentDistribution, AgentPerformance,
 } from '@/types';
 import { KPICard } from '@/components/ui/KPICard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -94,6 +94,130 @@ function SkeletonPanel({ height }: { height: number }) {
   return <div className={`animate-pulse bg-[#1a1d27] rounded-lg border border-[#2a2d3a]`} style={{ height }} />;
 }
 
+// ── Time-range aggregation helpers ────────────────────────────────────────────
+
+function aggregateWeekly(data: CallsOverTimePoint[]): CallsOverTimePoint[] {
+  const buckets: Record<string, CallsOverTimePoint> = {};
+  for (const pt of data) {
+    const d = new Date(pt.date + 'T00:00:00');
+    // Move to Monday of that week
+    const day = d.getDay(); // 0=Sun
+    const diff = (day === 0 ? -6 : 1 - day);
+    d.setDate(d.getDate() + diff);
+    const key = d.toISOString().slice(0, 10);
+    if (!buckets[key]) buckets[key] = { date: key, count: 0, booked_count: 0 };
+    buckets[key].count += pt.count;
+    buckets[key].booked_count += pt.booked_count;
+  }
+  return Object.values(buckets).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function aggregateMonthly(data: CallsOverTimePoint[]): CallsOverTimePoint[] {
+  const buckets: Record<string, CallsOverTimePoint> = {};
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  for (const pt of data) {
+    const d = new Date(pt.date + 'T00:00:00');
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = MONTHS[d.getMonth()];
+    if (!buckets[key]) buckets[key] = { date: label, count: 0, booked_count: 0 };
+    buckets[key].count += pt.count;
+    buckets[key].booked_count += pt.booked_count;
+  }
+  return Object.values(buckets).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+const RANGE_OPTIONS: { label: string; days: number }[] = [
+  { label: '7D', days: 7 },
+  { label: '30D', days: 30 },
+  { label: '3M', days: 90 },
+  { label: '6M', days: 180 },
+  { label: '1Y', days: 365 },
+];
+
+// ── Paul's Performance Card ───────────────────────────────────────────────────
+
+function PaulPerformanceCard({ data }: { data: AgentPerformance }) {
+  const noData = data.ai.count === 0;
+  const deltaPositive = data.margin_delta_pct >= 0;
+
+  return (
+    <div className="relative flex bg-gradient-to-r from-[#0d1a12] to-[#111318] border border-[#10b981]/30 rounded-lg p-5 overflow-hidden">
+      {/* Left accent bar */}
+      <div className="w-1 bg-[#10b981] rounded-full shrink-0 mr-5" />
+
+      <div className="flex-1 min-w-0">
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Bot className="w-5 h-5 text-[#10b981]" />
+            <span className="text-lg font-bold text-white tracking-tight">PAUL — AI FREIGHT AGENT</span>
+          </div>
+          <span className="text-xs font-mono-data bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 px-2.5 py-1 rounded-full whitespace-nowrap">
+            Automation: {data.automation_rate.toFixed(1)}%
+          </span>
+        </div>
+
+        {noData ? (
+          <p className="text-sm text-[#555555] italic py-2">
+            No AI-booked loads yet — Paul is ready to negotiate
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+            {/* Margin Achieved */}
+            <div>
+              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">Margin Achieved</p>
+              <p className="text-3xl font-bold font-mono-data text-green-400">
+                {data.ai.avg_margin_pct.toFixed(1)}%
+              </p>
+              {/* Margin bar */}
+              <div className="mt-2 h-1.5 rounded-full bg-[#1a2a1a] overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#10b981] to-[#34d399] rounded-full transition-all"
+                  style={{ width: `${Math.min(100, data.ai.avg_margin_pct * 4)}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Delta vs Manual */}
+            <div>
+              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">vs Manual</p>
+              <p className={`text-3xl font-bold font-mono-data ${deltaPositive ? 'text-green-400' : 'text-red-400'}`}>
+                {deltaPositive ? '+' : ''}{data.margin_delta_pct.toFixed(1)}%
+                <span className="text-lg ml-1">{deltaPositive ? '↑' : '↓'}</span>
+              </p>
+              <p className="text-[10px] text-[#555555] mt-2 font-mono-data">
+                Manual avg: {data.manual.avg_margin_pct.toFixed(1)}%
+              </p>
+            </div>
+
+            {/* Loads Booked */}
+            <div>
+              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">Loads Booked</p>
+              <p className="text-3xl font-bold font-mono-data text-white">{data.ai.count}</p>
+              <p className="text-[10px] text-[#555555] mt-2 font-mono-data">
+                of {data.ai.count + data.manual.count} total
+              </p>
+            </div>
+
+            {/* Revenue */}
+            <div>
+              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">Revenue</p>
+              <p className="text-3xl font-bold font-mono-data text-white">
+                {formatCurrency(data.ai.total_booked_revenue)}
+              </p>
+              <p className="text-[10px] text-[#555555] mt-2 font-mono-data">
+                avg {formatCurrency(data.ai.avg_booked_rate)}/load
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Overview Page ─────────────────────────────────────────────────────────────
+
 export default function OverviewPage() {
   const [metrics, setMetrics] = useState<MetricsOverview | null>(null);
   const [shippers, setShippers] = useState<Shipper[]>([]);
@@ -109,6 +233,10 @@ export default function OverviewPage() {
   const [outcomeDistribution, setOutcomeDistribution] = useState<OutcomeDistribution[] | null>(null);
   const [negotiationAnalysis, setNegotiationAnalysis] = useState<NegotiationAnalysis | null>(null);
   const [sentimentData, setSentimentData] = useState<SentimentDistribution | null>(null);
+  const [agentPerf, setAgentPerf] = useState<AgentPerformance | null>(null);
+
+  // Chart range state
+  const [range, setRange] = useState<number>(30);
 
   const loadData = useCallback(async () => {
     try {
@@ -144,20 +272,32 @@ export default function OverviewPage() {
   // Load analytics data (independent of shipper filter)
   const loadAnalytics = useCallback(async () => {
     try {
-      const [cotData, odData, naData, sentData] = await Promise.all([
-        getCallsOverTime(30),
+      const [cotData, odData, naData, sentData, perfData] = await Promise.all([
+        getCallsOverTime(range),
         getOutcomeDistribution(),
         getNegotiationAnalysis(),
         getSentimentDistribution(),
+        getAgentPerformance(),
       ]);
       setCallsOverTime(cotData);
       setOutcomeDistribution(odData);
       setNegotiationAnalysis(naData);
       setSentimentData(sentData);
+      setAgentPerf(perfData);
     } catch {
       // analytics are non-critical — don't surface error
     }
-  }, []);
+  }, [range]);
+
+  // Reload chart data when range changes
+  const reloadChart = useCallback(async () => {
+    try {
+      const cotData = await getCallsOverTime(range);
+      setCallsOverTime(cotData);
+    } catch {
+      // non-critical
+    }
+  }, [range]);
 
   useEffect(() => {
     loadData();
@@ -165,7 +305,19 @@ export default function OverviewPage() {
 
   useEffect(() => {
     loadAnalytics();
-  }, [loadAnalytics]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    reloadChart();
+  }, [reloadChart]);
+
+  // Aggregate chart data based on range
+  const chartData: CallsOverTimePoint[] = (() => {
+    if (!callsOverTime) return [];
+    if (range >= 180) return aggregateMonthly(callsOverTime);
+    if (range >= 90) return aggregateWeekly(callsOverTime);
+    return callsOverTime;
+  })();
 
   if (loading && !metrics) return <PageLoader />;
 
@@ -236,17 +388,42 @@ export default function OverviewPage() {
         </div>
       )}
 
+      {/* Paul's Performance — featured card */}
+      {agentPerf ? (
+        <PaulPerformanceCard data={agentPerf} />
+      ) : (
+        <SkeletonPanel height={130} />
+      )}
+
       {/* ── ANALYTICS SECTION ── */}
-      {/* Call Volume — full-width */}
+      {/* Call Volume — full-width with range selector */}
       <div className="bg-[#111318] border border-[#2a2d3a] rounded-lg p-5">
-        <SectionHeader title="Call Volume — Last 30 Days" />
+        <div className="flex items-center justify-between mb-3">
+          <SectionHeader title={`Call Volume — Last ${range >= 365 ? '1Y' : range >= 180 ? '6M' : range >= 90 ? '3M' : range >= 30 ? '30D' : '7D'}`} />
+          {/* Range selector */}
+          <div className="flex items-center gap-1 -mt-3">
+            {RANGE_OPTIONS.map(({ label, days }) => (
+              <button
+                key={label}
+                onClick={() => setRange(days)}
+                className={
+                  range === days
+                    ? 'bg-[#1a1d27] border border-[#3b82f6] text-blue-400 text-xs font-mono-data px-2.5 py-1 rounded'
+                    : 'bg-transparent border border-[#2a2d3a] text-[#555555] text-xs font-mono-data px-2.5 py-1 rounded hover:text-[#888888]'
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         {!callsOverTime ? (
           <div className="animate-pulse bg-[#1a1d27] rounded h-[180px]" />
-        ) : callsOverTime.length === 0 ? (
+        ) : chartData.length === 0 ? (
           <div className="flex items-center justify-center h-[180px] text-[#555555] text-sm">No data yet</div>
         ) : (
           <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={callsOverTime} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <AreaChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
@@ -261,6 +438,8 @@ export default function OverviewPage() {
               <XAxis
                 dataKey="date"
                 tickFormatter={(d: string) => {
+                  // Monthly aggregation already has "Jan", "Feb" etc.
+                  if (range >= 180) return d;
                   const dt = new Date(d + 'T00:00:00');
                   return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                 }}
@@ -279,7 +458,10 @@ export default function OverviewPage() {
                 contentStyle={{ background: '#111318', border: '1px solid #2a2d3a', borderRadius: 6, fontSize: 11 }}
                 labelStyle={{ color: '#aaaaaa', fontFamily: 'JetBrains Mono' }}
                 itemStyle={{ fontFamily: 'JetBrains Mono' }}
-                labelFormatter={(d) => typeof d === 'string' ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : String(d)}
+                labelFormatter={(d) => {
+                  if (range >= 180) return String(d);
+                  return typeof d === 'string' ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : String(d);
+                }}
               />
               <Area type="monotone" dataKey="count" name="Total Calls" stroke="#3b82f6" strokeWidth={1.5} fill="url(#gradTotal)" dot={false} />
               <Area type="monotone" dataKey="booked_count" name="Booked" stroke="#10b981" strokeWidth={1.5} fill="url(#gradBooked)" dot={false} />
@@ -444,7 +626,10 @@ export default function OverviewPage() {
           </div>
           {activeLoads.length === 0 ? (
             <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg p-8 text-center">
-              <p className="text-[#555555] text-sm">No active loads</p>
+              <div className="flex flex-col items-center justify-center py-8 text-[#555555]">
+                <Package className="w-8 h-8 mb-2 opacity-30" />
+                <p className="text-sm">No active loads</p>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -460,7 +645,10 @@ export default function OverviewPage() {
             <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">Preferred Carriers</h2>
             <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden">
               {topCarriers.length === 0 ? (
-                <div className="p-6 text-center text-[#555555] text-sm">No carrier data</div>
+                <div className="flex flex-col items-center justify-center py-8 text-[#555555]">
+                  <Truck className="w-8 h-8 mb-2 opacity-30" />
+                  <p className="text-sm">No carrier data</p>
+                </div>
               ) : (
                 <div className="divide-y divide-[#2a2a2a]">
                   {topCarriers.map(({ carrier, booking_count }, i) => (
@@ -499,7 +687,12 @@ export default function OverviewPage() {
               <tbody className="divide-y divide-[#1a1a1a]">
                 {quotes.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-[#555555] text-sm">No quotes available</td>
+                    <td colSpan={5} className="px-4 py-8 text-center">
+                      <div className="flex flex-col items-center justify-center py-4 text-[#555555]">
+                        <FileText className="w-8 h-8 mb-2 opacity-30" />
+                        <p className="text-sm">No quotes available</p>
+                      </div>
+                    </td>
                   </tr>
                 ) : (
                   quotes.map(q => (

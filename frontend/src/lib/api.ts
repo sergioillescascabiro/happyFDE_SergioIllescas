@@ -5,6 +5,7 @@ import type {
   NegotiationAnalysis,
   SentimentDistribution,
   FinancialMetrics,
+  AgentPerformance,
 } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -65,4 +66,8 @@ export async function getSentimentDistribution(): Promise<SentimentDistribution>
 
 export async function getFinancialMetrics(): Promise<FinancialMetrics> {
   return apiFetch<FinancialMetrics>('/api/metrics/financial');
+}
+
+export async function getAgentPerformance(): Promise<AgentPerformance> {
+  return apiFetch<AgentPerformance>('/api/metrics/agent-performance');
 }

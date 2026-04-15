@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, DragEvent } from 'react';
 import { Search, Filter, Upload, Package, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { apiFetch } from '@/lib/api';
-import { Load, LoadListResponse } from '@/types';
+import { Load, LoadListResponse, Shipper } from '@/types';
 import { LoadCard } from '@/components/loads/LoadCard';
 import { LoadDetail } from '@/components/loads/LoadDetail';
 
@@ -40,18 +40,85 @@ function parseCSV(text: string): CsvRow[] {
   }).filter(r => Object.values(r).some(v => v !== ''));
 }
 
+function generateLoadId(): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10).replace(/-/g, '');
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `LOAD-${date}-${rand}`;
+}
+
+const EQUIPMENT_TYPES = ['Dry Van', 'Flatbed', 'Reefer', 'Step Deck', 'RGN'];
+
+interface ManualFormData {
+  origin: string;
+  destination: string;
+  pickup_datetime: string;
+  delivery_datetime: string;
+  equipment_type: string;
+  loadboard_rate: string;
+  quoted_rate: string;
+  weight: string;
+  commodity_type: string;
+  miles: string;
+  shipper_id: string;
+  num_of_pieces: string;
+  dimensions: string;
+  reference_id: string;
+  notes: string;
+}
+
+interface ManualFormErrors {
+  origin?: string;
+  destination?: string;
+  pickup_datetime?: string;
+  delivery_datetime?: string;
+  equipment_type?: string;
+  loadboard_rate?: string;
+  quoted_rate?: string;
+  weight?: string;
+  commodity_type?: string;
+  miles?: string;
+  shipper_id?: string;
+}
+
+const INPUT_CLS = 'bg-[#0d1017] border border-[#2a2d3a] text-white text-sm rounded-md px-3 py-2 w-full focus:outline-none focus:border-[#3b82f6]';
+const LABEL_CLS = 'text-xs text-[#888888] mb-1 block';
+const ERROR_CLS = 'text-xs text-red-400 mt-1';
+const REQ = <span className="text-red-400 ml-0.5">*</span>;
+
 interface UploadModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
 
 function UploadModal({ onClose, onSuccess }: UploadModalProps) {
+  const [activeTab, setActiveTab] = useState<'csv' | 'manual'>('csv');
+
+  // CSV state
   const [dragOver, setDragOver] = useState(false);
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [fileName, setFileName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<{ ok: number; errors: string[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Manual form state
+  const [shippers, setShippers] = useState<Shipper[]>([]);
+  const [form, setForm] = useState<ManualFormData>({
+    origin: '', destination: '', pickup_datetime: '', delivery_datetime: '',
+    equipment_type: 'Dry Van', loadboard_rate: '', quoted_rate: '',
+    weight: '', commodity_type: '', miles: '', shipper_id: '',
+    num_of_pieces: '', dimensions: '', reference_id: '', notes: '',
+  });
+  const [formErrors, setFormErrors] = useState<ManualFormErrors>({});
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualResult, setManualResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    apiFetch<Shipper[]>('/api/shippers').then(setShippers).catch(() => {});
+  }, []);
+
+  // ── CSV handlers ────────────────────────────────────────────────────────────
 
   const handleFile = (file: File) => {
     setFileName(file.name);
@@ -77,7 +144,7 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
     for (const row of rows) {
       try {
         const payload: Record<string, unknown> = {
-          load_id: row.load_id || `LOAD-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+          load_id: row.load_id || generateLoadId(),
           shipper_id: row.shipper_id,
           origin: row.origin,
           destination: row.destination,
@@ -106,6 +173,85 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
     if (ok > 0) onSuccess();
   };
 
+  // ── Manual form handlers ────────────────────────────────────────────────────
+
+  const setField = (key: keyof ManualFormData, value: string) => {
+    setForm(prev => ({ ...prev, [key]: value }));
+    if (formErrors[key as keyof ManualFormErrors]) {
+      setFormErrors(prev => ({ ...prev, [key]: undefined }));
+    }
+  };
+
+  const validateManual = (): ManualFormErrors => {
+    const errs: ManualFormErrors = {};
+    if (!form.origin.trim()) errs.origin = 'Origin is required';
+    if (!form.destination.trim()) errs.destination = 'Destination is required';
+    if (!form.pickup_datetime) errs.pickup_datetime = 'Pickup date is required';
+    if (!form.delivery_datetime) errs.delivery_datetime = 'Delivery date is required';
+    else if (form.pickup_datetime && new Date(form.delivery_datetime) <= new Date(form.pickup_datetime)) {
+      errs.delivery_datetime = 'Delivery must be after pickup';
+    }
+    if (!form.equipment_type) errs.equipment_type = 'Equipment type is required';
+    const lb = parseFloat(form.loadboard_rate);
+    if (!form.loadboard_rate || isNaN(lb) || lb < 100) errs.loadboard_rate = 'Loadboard rate must be ≥ $100';
+    const qr = parseFloat(form.quoted_rate);
+    if (!form.quoted_rate || isNaN(qr) || qr < 100) errs.quoted_rate = 'Quoted rate must be ≥ $100';
+    else if (!isNaN(lb) && qr <= lb) errs.quoted_rate = 'Quoted rate must exceed loadboard rate';
+    const wt = parseFloat(form.weight);
+    if (!form.weight || isNaN(wt) || wt < 1) errs.weight = 'Weight must be ≥ 1 lbs';
+    if (!form.commodity_type.trim()) errs.commodity_type = 'Commodity type is required';
+    const mi = parseFloat(form.miles);
+    if (!form.miles || isNaN(mi) || mi < 1) errs.miles = 'Miles must be ≥ 1';
+    if (!form.shipper_id) errs.shipper_id = 'Shipper is required';
+    return errs;
+  };
+
+  const handleManualSubmit = async () => {
+    const errs = validateManual();
+    if (Object.keys(errs).length > 0) {
+      setFormErrors(errs);
+      return;
+    }
+    setManualSubmitting(true);
+    setManualResult(null);
+    try {
+      const payload: Record<string, unknown> = {
+        load_id: generateLoadId(),
+        shipper_id: form.shipper_id,
+        origin: form.origin.trim(),
+        destination: form.destination.trim(),
+        pickup_datetime: form.pickup_datetime,
+        delivery_datetime: form.delivery_datetime,
+        equipment_type: form.equipment_type,
+        loadboard_rate: parseFloat(form.loadboard_rate),
+        quoted_rate: parseFloat(form.quoted_rate),
+        weight: parseFloat(form.weight),
+        commodity_type: form.commodity_type.trim(),
+        miles: parseFloat(form.miles),
+        num_of_pieces: form.num_of_pieces ? parseInt(form.num_of_pieces) : 1,
+        dimensions: form.dimensions.trim() || undefined,
+        reference_id: form.reference_id.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+        status: 'available',
+      };
+      await apiFetch('/api/loads', { method: 'POST', body: JSON.stringify(payload) });
+      setManualResult({ ok: true, message: 'Load created successfully' });
+      onSuccess();
+      // Reset form
+      setForm({
+        origin: '', destination: '', pickup_datetime: '', delivery_datetime: '',
+        equipment_type: 'Dry Van', loadboard_rate: '', quoted_rate: '',
+        weight: '', commodity_type: '', miles: '', shipper_id: '',
+        num_of_pieces: '', dimensions: '', reference_id: '', notes: '',
+      });
+      setFormErrors({});
+    } catch (err) {
+      setManualResult({ ok: false, message: err instanceof Error ? err.message : 'Failed to create load' });
+    } finally {
+      setManualSubmitting(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-[#111318] border border-[#2a2d3a] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -113,121 +259,379 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a2d3a]">
           <div>
             <h2 className="text-base font-semibold text-white">Upload Loads</h2>
-            <p className="text-xs text-[#555555] mt-0.5">Import loads from a CSV file</p>
+            <p className="text-xs text-[#555555] mt-0.5">Import from CSV or enter manually</p>
           </div>
           <button onClick={onClose} className="text-[#555555] hover:text-white transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
-          {/* Drop zone */}
-          {rows.length === 0 && !results && (
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileRef.current?.click()}
-              className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
-                dragOver ? 'border-blue-500 bg-blue-500/5' : 'border-[#2a2d3a] hover:border-[#444] bg-[#0d1017]'
+        {/* Tab switcher */}
+        <div className="flex border-b border-[#2a2d3a] px-6">
+          {(['csv', 'manual'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-3 text-sm transition-colors border-b-2 -mb-px ${
+                activeTab === tab
+                  ? 'text-white border-white'
+                  : 'text-[#555555] border-transparent hover:text-[#888]'
               }`}
             >
-              <Upload className="w-8 h-8 mx-auto mb-3 text-[#555555]" />
-              <p className="text-sm text-[#aaaaaa]">Drop a CSV file here, or <span className="text-blue-400 underline">browse</span></p>
-              <p className="text-xs text-[#555555] mt-1">Required: origin, destination, pickup_datetime, delivery_datetime, loadboard_rate, quoted_rate, weight, commodity_type, miles, shipper_id</p>
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-              />
-            </div>
-          )}
+              {tab === 'csv' ? 'CSV Upload' : 'Add Manually'}
+            </button>
+          ))}
+        </div>
 
-          {/* Preview */}
-          {rows.length > 0 && !results && (
-            <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-400" />
-                  <span className="text-sm text-white">{fileName}</span>
-                  <span className="text-xs text-[#555555] font-mono-data">{rows.length} rows parsed</span>
-                </div>
-                <button onClick={() => { setRows([]); setFileName(''); }} className="text-xs text-[#555555] hover:text-white">
-                  Clear
-                </button>
+        {/* ── CSV Tab ── */}
+        {activeTab === 'csv' && (
+          <div className="p-6 space-y-5">
+            {/* Drop zone */}
+            {rows.length === 0 && !results && (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+                onClick={() => fileRef.current?.click()}
+                className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors ${
+                  dragOver ? 'border-blue-500 bg-blue-500/5' : 'border-[#2a2d3a] hover:border-[#444] bg-[#0d1017]'
+                }`}
+              >
+                <Upload className="w-8 h-8 mx-auto mb-3 text-[#555555]" />
+                <p className="text-sm text-[#aaaaaa]">Drop a CSV file here, or <span className="text-blue-400 underline">browse</span></p>
+                <p className="text-xs text-[#555555] mt-1">Required: origin, destination, pickup_datetime, delivery_datetime, loadboard_rate, quoted_rate, weight, commodity_type, miles, shipper_id</p>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                />
               </div>
-              <div className="overflow-x-auto rounded-lg border border-[#2a2d3a]">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-[#2a2d3a]">
-                      {CSV_COLUMNS.filter(c => rows[0]?.[c] !== undefined).map(col => (
-                        <th key={col} className="px-3 py-2 text-left text-[#555555] uppercase tracking-wider whitespace-nowrap font-mono-data">
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#1a1a1a]">
-                    {rows.slice(0, 5).map((row, i) => (
-                      <tr key={i} className="hover:bg-white/5">
+            )}
+
+            {/* Preview */}
+            {rows.length > 0 && !results && (
+              <>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-400" />
+                    <span className="text-sm text-white">{fileName}</span>
+                    <span className="text-xs text-[#555555] font-mono-data">{rows.length} rows parsed</span>
+                  </div>
+                  <button onClick={() => { setRows([]); setFileName(''); }} className="text-xs text-[#555555] hover:text-white">
+                    Clear
+                  </button>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-[#2a2d3a]">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-[#2a2d3a]">
                         {CSV_COLUMNS.filter(c => rows[0]?.[c] !== undefined).map(col => (
-                          <td key={col} className="px-3 py-2 text-[#aaaaaa] font-mono-data whitespace-nowrap max-w-[120px] truncate">
-                            {row[col] ?? '—'}
-                          </td>
+                          <th key={col} className="px-3 py-2 text-left text-[#555555] uppercase tracking-wider whitespace-nowrap font-mono-data">
+                            {col}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {rows.length > 5 && (
-                <p className="text-xs text-[#555555] text-center">+{rows.length - 5} more rows</p>
-              )}
-            </>
-          )}
-
-          {/* Results */}
-          {results && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-green-400">
-                <CheckCircle className="w-5 h-5" />
-                <span className="text-sm font-medium">{results.ok} load{results.ok !== 1 ? 's' : ''} created successfully</span>
-              </div>
-              {results.errors.length > 0 && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 space-y-1">
-                  <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-2">
-                    <AlertCircle className="w-4 h-4" />
-                    {results.errors.length} error{results.errors.length !== 1 ? 's' : ''}
-                  </div>
-                  {results.errors.map((e, i) => (
-                    <p key={i} className="text-xs text-red-300 font-mono-data">{e}</p>
-                  ))}
+                    </thead>
+                    <tbody className="divide-y divide-[#1a1a1a]">
+                      {rows.slice(0, 5).map((row, i) => (
+                        <tr key={i} className="hover:bg-white/5">
+                          {CSV_COLUMNS.filter(c => rows[0]?.[c] !== undefined).map(col => (
+                            <td key={col} className="px-3 py-2 text-[#aaaaaa] font-mono-data whitespace-nowrap max-w-[120px] truncate">
+                              {row[col] ?? '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
+                {rows.length > 5 && (
+                  <p className="text-xs text-[#555555] text-center">+{rows.length - 5} more rows</p>
+                )}
+              </>
+            )}
+
+            {/* Results */}
+            {results && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-green-400">
+                  <CheckCircle className="w-5 h-5" />
+                  <span className="text-sm font-medium">{results.ok} load{results.ok !== 1 ? 's' : ''} created successfully</span>
+                </div>
+                {results.errors.length > 0 && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 space-y-1">
+                    <div className="flex items-center gap-2 text-red-400 text-xs font-medium mb-2">
+                      <AlertCircle className="w-4 h-4" />
+                      {results.errors.length} error{results.errors.length !== 1 ? 's' : ''}
+                    </div>
+                    {results.errors.map((e, i) => (
+                      <p key={i} className="text-xs text-red-300 font-mono-data">{e}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-[#888] hover:text-white border border-[#2a2d3a] hover:border-[#444] rounded-md transition-colors"
+              >
+                {results ? 'Close' : 'Cancel'}
+              </button>
+              {rows.length > 0 && !results && (
+                <button
+                  onClick={handleUpload}
+                  disabled={uploading}
+                  className="px-4 py-2 text-sm bg-white text-black font-medium rounded-md hover:bg-white/90 disabled:opacity-50 transition-colors"
+                >
+                  {uploading ? `Uploading ${rows.length} loads…` : `Upload ${rows.length} Load${rows.length !== 1 ? 's' : ''}`}
+                </button>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[#2a2d3a]">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-[#888] hover:text-white border border-[#2a2d3a] hover:border-[#444] rounded-md transition-colors"
-          >
-            {results ? 'Close' : 'Cancel'}
-          </button>
-          {rows.length > 0 && !results && (
-            <button
-              onClick={handleUpload}
-              disabled={uploading}
-              className="px-4 py-2 text-sm bg-white text-black font-medium rounded-md hover:bg-white/90 disabled:opacity-50 transition-colors"
-            >
-              {uploading ? `Uploading ${rows.length} loads…` : `Upload ${rows.length} Load${rows.length !== 1 ? 's' : ''}`}
-            </button>
-          )}
-        </div>
+        {/* ── Manual Tab ── */}
+        {activeTab === 'manual' && (
+          <div className="p-6 space-y-5">
+            {manualResult && (
+              <div className={`flex items-center gap-2 text-sm rounded-lg px-4 py-3 border ${
+                manualResult.ok
+                  ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                  : 'bg-red-500/10 border-red-500/30 text-red-400'
+              }`}>
+                {manualResult.ok ? <CheckCircle className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                {manualResult.message}
+              </div>
+            )}
+
+            {/* Required fields grid */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Origin */}
+              <div>
+                <label className={LABEL_CLS}>Origin{REQ}</label>
+                <input
+                  type="text"
+                  placeholder="Chicago, IL"
+                  value={form.origin}
+                  onChange={e => setField('origin', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.origin && <p className={ERROR_CLS}>{formErrors.origin}</p>}
+              </div>
+
+              {/* Destination */}
+              <div>
+                <label className={LABEL_CLS}>Destination{REQ}</label>
+                <input
+                  type="text"
+                  placeholder="Dallas, TX"
+                  value={form.destination}
+                  onChange={e => setField('destination', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.destination && <p className={ERROR_CLS}>{formErrors.destination}</p>}
+              </div>
+
+              {/* Pickup Date/Time */}
+              <div>
+                <label className={LABEL_CLS}>Pickup Date/Time{REQ}</label>
+                <input
+                  type="datetime-local"
+                  value={form.pickup_datetime}
+                  onChange={e => setField('pickup_datetime', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.pickup_datetime && <p className={ERROR_CLS}>{formErrors.pickup_datetime}</p>}
+              </div>
+
+              {/* Delivery Date/Time */}
+              <div>
+                <label className={LABEL_CLS}>Delivery Date/Time{REQ}</label>
+                <input
+                  type="datetime-local"
+                  value={form.delivery_datetime}
+                  onChange={e => setField('delivery_datetime', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.delivery_datetime && <p className={ERROR_CLS}>{formErrors.delivery_datetime}</p>}
+              </div>
+
+              {/* Equipment Type */}
+              <div>
+                <label className={LABEL_CLS}>Equipment Type{REQ}</label>
+                <select
+                  value={form.equipment_type}
+                  onChange={e => setField('equipment_type', e.target.value)}
+                  className={INPUT_CLS}
+                >
+                  {EQUIPMENT_TYPES.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                {formErrors.equipment_type && <p className={ERROR_CLS}>{formErrors.equipment_type}</p>}
+              </div>
+
+              {/* Shipper */}
+              <div>
+                <label className={LABEL_CLS}>Shipper{REQ}</label>
+                <select
+                  value={form.shipper_id}
+                  onChange={e => setField('shipper_id', e.target.value)}
+                  className={INPUT_CLS}
+                >
+                  <option value="">Select shipper…</option>
+                  {shippers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                {formErrors.shipper_id && <p className={ERROR_CLS}>{formErrors.shipper_id}</p>}
+              </div>
+
+              {/* Loadboard Rate */}
+              <div>
+                <label className={LABEL_CLS}>Loadboard Rate ($){REQ}</label>
+                <input
+                  type="number"
+                  min="100"
+                  placeholder="1000"
+                  value={form.loadboard_rate}
+                  onChange={e => setField('loadboard_rate', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.loadboard_rate && <p className={ERROR_CLS}>{formErrors.loadboard_rate}</p>}
+              </div>
+
+              {/* Quoted Rate */}
+              <div>
+                <label className={LABEL_CLS}>Quoted Rate ($){REQ}</label>
+                <input
+                  type="number"
+                  min="100"
+                  placeholder="1250"
+                  value={form.quoted_rate}
+                  onChange={e => setField('quoted_rate', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.quoted_rate && <p className={ERROR_CLS}>{formErrors.quoted_rate}</p>}
+              </div>
+
+              {/* Weight */}
+              <div>
+                <label className={LABEL_CLS}>Weight (lbs){REQ}</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="45000"
+                  value={form.weight}
+                  onChange={e => setField('weight', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.weight && <p className={ERROR_CLS}>{formErrors.weight}</p>}
+              </div>
+
+              {/* Commodity Type */}
+              <div>
+                <label className={LABEL_CLS}>Commodity Type{REQ}</label>
+                <input
+                  type="text"
+                  placeholder="General Freight"
+                  value={form.commodity_type}
+                  onChange={e => setField('commodity_type', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.commodity_type && <p className={ERROR_CLS}>{formErrors.commodity_type}</p>}
+              </div>
+
+              {/* Miles */}
+              <div>
+                <label className={LABEL_CLS}>Miles{REQ}</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="410"
+                  value={form.miles}
+                  onChange={e => setField('miles', e.target.value)}
+                  className={INPUT_CLS}
+                />
+                {formErrors.miles && <p className={ERROR_CLS}>{formErrors.miles}</p>}
+              </div>
+
+              {/* Num of Pieces (optional) */}
+              <div>
+                <label className={LABEL_CLS}>Num of Pieces</label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="1"
+                  value={form.num_of_pieces}
+                  onChange={e => setField('num_of_pieces', e.target.value)}
+                  className={INPUT_CLS}
+                />
+              </div>
+            </div>
+
+            {/* Optional single-column fields */}
+            <div className="grid grid-cols-2 gap-4">
+              {/* Dimensions (optional) */}
+              <div>
+                <label className={LABEL_CLS}>Dimensions</label>
+                <input
+                  type="text"
+                  placeholder="48x48x96"
+                  value={form.dimensions}
+                  onChange={e => setField('dimensions', e.target.value)}
+                  className={INPUT_CLS}
+                />
+              </div>
+
+              {/* Reference ID (optional) */}
+              <div>
+                <label className={LABEL_CLS}>Reference ID</label>
+                <input
+                  type="text"
+                  placeholder="REF-001"
+                  value={form.reference_id}
+                  onChange={e => setField('reference_id', e.target.value)}
+                  className={INPUT_CLS}
+                />
+              </div>
+            </div>
+
+            {/* Notes (optional) */}
+            <div>
+              <label className={LABEL_CLS}>Notes</label>
+              <textarea
+                rows={3}
+                placeholder="Additional notes…"
+                value={form.notes}
+                onChange={e => setField('notes', e.target.value)}
+                className={INPUT_CLS + ' resize-none'}
+              />
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm text-[#888] hover:text-white border border-[#2a2d3a] hover:border-[#444] rounded-md transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualSubmit}
+                disabled={manualSubmitting}
+                className="px-4 py-2 text-sm bg-[#10b981] hover:bg-[#0d9668] text-white font-medium rounded-md disabled:opacity-50 transition-colors"
+              >
+                {manualSubmitting ? 'Creating…' : 'Create Load'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -379,7 +783,7 @@ export default function LoadsPage() {
         <UploadModal
           onClose={() => setShowUploadModal(false)}
           onSuccess={() => {
-            showToast('Loads uploaded successfully');
+            showToast('Load created successfully');
             fetchLoads();
           }}
         />
