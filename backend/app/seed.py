@@ -44,6 +44,7 @@ def seed_shippers(db):
         Shipper(
             id=str(uuid.uuid4()),
             name="Walmart Distribution",
+            shipper_type="Big Box Retail",
             contact_name="James Miller",
             contact_email="james.miller@walmart-dist.com",
             contact_phone="479-555-0101",
@@ -53,6 +54,7 @@ def seed_shippers(db):
         Shipper(
             id=str(uuid.uuid4()),
             name="Home Depot Supply",
+            shipper_type="Home Improvement",
             contact_name="Sandra Chen",
             contact_email="sandra.chen@homedepot.com",
             contact_phone="770-555-0202",
@@ -62,6 +64,7 @@ def seed_shippers(db):
         Shipper(
             id=str(uuid.uuid4()),
             name="AutoZone Parts",
+            shipper_type="Automotive Logistics",
             contact_name="Robert Davis",
             contact_email="robert.davis@autozone.com",
             contact_phone="901-555-0303",
@@ -71,6 +74,7 @@ def seed_shippers(db):
         Shipper(
             id=str(uuid.uuid4()),
             name="Sysco Foods",
+            shipper_type="Food Service/Reefer",
             contact_name="Maria Gonzalez",
             contact_email="maria.gonzalez@sysco.com",
             contact_phone="713-555-0404",
@@ -83,8 +87,68 @@ def seed_shippers(db):
     return {s.name: s for s in shippers}
 
 
-def make_load(load_id, shipper, origin, destination, miles, equipment, commodity, weight, status, pickup_offset_days, num_pieces=1, notes=None, ref_id=None, dimensions=None):
-    # Rate logic by equipment
+def generate_operational_notes(equipment, commodity):
+    """Generate realistic operational notes for the load."""
+    general_notes = [
+        "Driver must have PPE (Vest, Boots).",
+        "FCFS (First Come First Serve) pickup.",
+        "Strict appointment required for delivery.",
+        "Clean, dry trailer required.",
+        "No multi-stop. Straight thru.",
+        "Trailer must be newer than 10 years.",
+        "Check-calls required every 4 hours.",
+    ]
+    specific_notes = {
+        "Reefer": ["Pre-cool to -10F before arrival.", "Continuous run only."],
+        "Flatbed": ["Tarping required (8ft drops).", "Straps and chains needed."],
+        "Dry Van": ["Seal must remain intact until destination."],
+    }
+    
+    notes = random.sample(general_notes, 2)
+    notes += specific_notes.get(equipment, [])
+    return " | ".join(notes)
+
+
+def generate_dimensions(equipment, num_pieces, weight):
+    """Generate industry-standard dimensions for different equipment types."""
+    if equipment in ("Dry Van", "Reefer"):
+        if num_pieces > 0 and num_pieces <= 26:
+            # LTL or partial palletized freight
+            height = random.choice([48, 60, 72, 84, 96])
+            return f"{num_pieces} PLTS, 48x40x{height}"
+        else:
+            # Full trailer standard
+            return "53' x 102\" x 110\""
+    elif equipment in ("Flatbed", "Step Deck"):
+        # Construction or industrial cargo
+        length = random.choice([20, 30, 40, 48, 53])
+        width = 102
+        height = random.choice([48, 96, 102])
+        return f"{length}' x {width}\" x {height}\""
+    elif equipment == "Tanker":
+        # Capacity instead of L x W x H
+        capacity = random.choice([5500, 6500, 7000, 8000])
+        return f"{capacity} Gallon Cap"
+    return "Standard Dims"
+
+
+def make_load(load_id, shipper, origin, destination, miles, equipment, commodity, weight, status, pickup_offset_days, num_pieces=None, notes=None, ref_id=None, dimensions=None):
+    # num_pieces logic if not provided
+    if num_pieces is None:
+        if equipment in ("Dry Van", "Reefer"):
+            num_pieces = random.randint(1, 26)
+        else:
+            num_pieces = 1
+
+    # dimensions logic if not provided
+    if dimensions is None:
+        dimensions = generate_dimensions(equipment, num_pieces, weight)
+
+    # notes logic if not provided
+    if notes is None:
+        notes = generate_operational_notes(equipment, commodity)
+
+    # Rate logic (unaffected)
     rate_ranges = {
         "Dry Van": (1.65, 2.40),
         "Reefer": (2.10, 3.20),
@@ -95,15 +159,14 @@ def make_load(load_id, shipper, origin, destination, miles, equipment, commodity
     lo, hi = rate_ranges.get(equipment, (1.50, 2.50))
     per_mile = round(random.uniform(lo, hi), 4)
     raw_rate = per_mile * miles
-    loadboard_rate = round(raw_rate / 25) * 25  # round to nearest $25 — industry standard
-    # quoted_rate = broker charges shipper (12-17% markup — industry realistic)
+    loadboard_rate = round(raw_rate / 25) * 25
     markup = random.uniform(1.12, 1.17)
     quoted_rate = round(loadboard_rate * markup / 25) * 25
-    max_rate = round(quoted_rate * 0.92 / 25) * 25   # max broker pays carrier (~1.03-1.08× loadboard)
+    max_rate = round(quoted_rate * 0.92 / 25) * 25
     min_rate = round(loadboard_rate * 0.88 / 25) * 25
 
     pickup_dt = TODAY + timedelta(days=pickup_offset_days)
-    delivery_dt = pickup_dt + timedelta(hours=int(miles / 55))  # ~55 mph average
+    delivery_dt = pickup_dt + timedelta(hours=int(miles / 55))
 
     return Load(
         id=str(uuid.uuid4()),
@@ -125,7 +188,7 @@ def make_load(load_id, shipper, origin, destination, miles, equipment, commodity
         reference_id=ref_id or f"REF-{load_id}",
         dimensions=dimensions,
         status=status,
-    ), quoted_rate  # return quoted_rate separately for quote creation
+    ), quoted_rate
 
 
 def seed_loads(db, shippers):
@@ -497,10 +560,15 @@ def seed_quotes(db, shippers, loads):
 
 
 def main():
+    # Force schema update for dev environment
+    print("Resetting database schema...")
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
     try:
-        print("Clearing existing data...")
-        clear_db(db)
+        # print("Clearing existing data...")
+        # clear_db(db) # metadata.drop_all already cleared it
 
         print("Seeding shippers...")
         shippers = seed_shippers(db)

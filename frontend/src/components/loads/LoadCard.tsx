@@ -50,12 +50,18 @@ export function LoadCard({ load, isSelected, onClick }: LoadCardProps) {
         <span className="text-sm font-semibold text-white truncate max-w-[120px]">{load.destination}</span>
       </div>
 
-      <div className="flex items-center gap-2.5 text-[10px] text-slate-500 font-bold font-mono-data uppercase tracking-wider">
+      <div className="flex flex-wrap items-center gap-2.5 text-[10px] text-slate-500 font-bold font-mono-data uppercase tracking-wider">
         <span className="bg-white/5 px-2 py-0.5 rounded text-slate-400">{formatDate(load.pickup_datetime)}</span>
         <span className="text-slate-800">|</span>
         <span className="text-emerald-500/80">{load.miles.toFixed(0)} mi</span>
         <span className="text-slate-800">|</span>
-        <span>{load.equipment_type}</span>
+        <span className="text-slate-400">{load.equipment_type}</span>
+        {load.dimensions && (
+          <>
+            <span className="text-slate-800">|</span>
+            <span className="text-slate-500 truncate max-w-[80px]">{load.dimensions}</span>
+          </>
+        )}
       </div>
     </button>
   );

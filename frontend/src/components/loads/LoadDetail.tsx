@@ -345,7 +345,12 @@ export function LoadDetail({ load }: LoadDetailProps) {
       {/* Header */}
       <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.01]">
         <div className="flex items-center gap-4">
-          <h2 className="text-lg font-bold text-white font-heading tracking-tight">Load Ref: <span className="font-mono-data text-emerald-400">{load.load_id}</span></h2>
+          <h2 className="text-lg font-bold text-white font-heading tracking-tight">
+            Load Ref: <span className="font-mono-data text-emerald-400">{load.load_id}</span>
+            {load.shipper_name && (
+              <span className="ml-2 text-slate-500 font-medium">· {load.shipper_name}</span>
+            )}
+          </h2>
           <StatusBadge status={load.status} />
         </div>
         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em] font-heading">{load.equipment_type}</span>
