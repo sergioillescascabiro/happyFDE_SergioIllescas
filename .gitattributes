@@ -1,0 +1,2 @@
+# Custom merge strategy for README to separate Business and Tech docs
+README.md merge=ours
