@@ -44,9 +44,11 @@ export function CallCard({ call, onPickUp }: CallCardProps) {
             <PhoneIncoming className={clsx('w-3.5 h-3.5', isLive ? 'text-green-400' : 'text-[#555555]')} />
           </div>
           <div>
-            <p className="text-xs font-medium text-white">{call.use_case}</p>
+            <p className="text-xs font-medium text-white">
+              {call.carrier_name ?? call.use_case}
+            </p>
             <p className="text-[10px] text-[#555555] font-mono-data">
-              {call.phone_number ?? 'Unknown'} · {formatTime(call.call_start)}
+              {call.mc_number ? `MC ${call.mc_number}` : call.phone_number ?? 'Unknown'} · {formatTime(call.call_start)}
             </p>
           </div>
         </div>
