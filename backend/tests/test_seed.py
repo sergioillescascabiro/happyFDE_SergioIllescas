@@ -45,7 +45,7 @@ def test_no_rate_leakage_model():
     try:
         load = db.query(Load).first()
         assert load is not None
-        assert load.max_rate > load.loadboard_rate, "max_rate should be > loadboard_rate"
+        assert load.max_rate >= load.loadboard_rate, "max_rate should be >= loadboard_rate"
         assert load.min_rate < load.loadboard_rate, "min_rate should be < loadboard_rate"
     finally:
         db.close()

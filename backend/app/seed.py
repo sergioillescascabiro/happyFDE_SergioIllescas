@@ -96,11 +96,11 @@ def make_load(load_id, shipper, origin, destination, miles, equipment, commodity
     per_mile = round(random.uniform(lo, hi), 4)
     raw_rate = per_mile * miles
     loadboard_rate = round(raw_rate / 25) * 25  # round to nearest $25 — industry standard
-    # quoted_rate = broker charges shipper (20-30% markup)
-    markup = random.uniform(1.20, 1.30)
+    # quoted_rate = broker charges shipper (12-17% markup — industry realistic)
+    markup = random.uniform(1.12, 1.17)
     quoted_rate = round(loadboard_rate * markup / 25) * 25
-    max_rate = round(quoted_rate * 0.85 / 25) * 25
-    min_rate = round(loadboard_rate * 0.85 / 25) * 25
+    max_rate = round(quoted_rate * 0.92 / 25) * 25   # max broker pays carrier (~1.03-1.08× loadboard)
+    min_rate = round(loadboard_rate * 0.88 / 25) * 25
 
     pickup_dt = TODAY + timedelta(days=pickup_offset_days)
     delivery_dt = pickup_dt + timedelta(hours=int(miles / 55))  # ~55 mph average
@@ -214,12 +214,19 @@ def seed_loads(db, shippers):
     for load, quote in zip(loads, quotes):
         load.quote_id = quote.id
         if load.status in (LoadStatus.covered, LoadStatus.delivered):
-            # Simulate a booked_rate between min_rate and loadboard_rate
-            booked = round(random.uniform(load.min_rate, load.loadboard_rate) / 25) * 25
-            load.booked_rate = float(booked)
+            # Assign AI vs manual first so booked_rate reflects negotiation quality
+            is_ai = random.choice([True, False])
+            load.is_ai_booked = is_ai
             qr = quoted_rates[load.load_id]
+            lb = load.loadboard_rate
+            if is_ai:
+                # Paul negotiates well: pays 88-95% of loadboard → margin ~14-19%
+                booked = round(random.uniform(lb * 0.88, lb * 0.95) / 25) * 25
+            else:
+                # Manual broker concedes more: pays 97-105% of loadboard → margin ~8-13%
+                booked = round(random.uniform(lb * 0.97, min(lb * 1.05, load.max_rate)) / 25) * 25
+            load.booked_rate = float(booked)
             load.margin_pct = round((qr - booked) / qr * 100, 2)
-            load.is_ai_booked = random.choice([True, False])
 
     db.commit()
     return {l.load_id: l for l in loads}
