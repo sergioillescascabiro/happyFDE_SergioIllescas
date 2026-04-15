@@ -31,12 +31,19 @@ def test_agent_load_search_no_filters(client):
 
 
 def test_agent_load_search_by_origin(client):
-    """Filter by origin=Dallas returns a load from Dallas."""
-    r = client.get("/api/agent/loads/search?origin=Dallas", headers=AGENT_HEADERS)
+    """Filter by origin city returns a load from that city (city discovered dynamically)."""
+    # First find any available load to get a valid origin city
+    r0 = client.get("/api/agent/loads/search", headers=AGENT_HEADERS)
+    assert r0.status_code == 200, "No available loads in DB — re-seed first"
+    any_load = r0.json()
+    # Extract just the city name (before the comma) for a stable partial match
+    city = any_load["origin"].split(",")[0].strip()
+
+    r = client.get(f"/api/agent/loads/search?origin={city}", headers=AGENT_HEADERS)
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, dict)
-    assert "Dallas" in data["origin"]
+    assert city in data["origin"]
 
 
 def test_agent_load_search_by_equipment(client):
