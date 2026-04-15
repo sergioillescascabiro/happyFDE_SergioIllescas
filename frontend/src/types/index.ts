@@ -1,4 +1,4 @@
-export type LoadStatus = 'available' | 'pending' | 'covered' | 'cancelled';
+export type LoadStatus = 'available' | 'pending' | 'covered' | 'cancelled' | 'delivered';
 export type CallOutcome = 'booked' | 'rejected' | 'no_agreement' | 'cancelled' | 'carrier_not_authorized' | 'no_loads_available' | 'transferred' | 'in_progress';
 export type CallSentiment = 'positive' | 'neutral' | 'negative';
 export type CallDirection = 'inbound' | 'outbound';
@@ -29,6 +29,10 @@ export interface Load {
   status: LoadStatus;
   total_rate: number;
   per_mile_rate: number;
+  booked_rate?: number | null;
+  margin_pct?: number | null;
+  is_ai_booked?: boolean;
+  quote_id?: string | null;
   created_at: string;
   updated_at: string;
   recommended_carriers?: CarrierSummary[];
@@ -97,6 +101,9 @@ export interface NegotiationRound {
   system_response: 'accept' | 'reject' | 'counter';
   counter_offer?: number;
   counter_offer_per_mile?: number;
+  final_price?: number | null;
+  tone?: string | null;
+  is_final?: boolean;
   notes?: string;
   created_at: string;
 }
@@ -169,4 +176,41 @@ export interface CallListResponse {
   page: number;
   page_size: number;
   pages: number;
+}
+
+export interface CallsOverTimePoint {
+  date: string;
+  count: number;
+  booked_count: number;
+}
+
+export interface OutcomeDistribution {
+  outcome: string;
+  count: number;
+}
+
+export interface NegotiationAnalysis {
+  avg_rounds: number;
+  acceptance_rate: number;
+  rejection_rate: number;
+  counter_rate: number;
+  total_negotiations: number;
+}
+
+export interface SentimentDistribution {
+  positive: { count: number; percentage: number };
+  neutral: { count: number; percentage: number };
+  negative: { count: number; percentage: number };
+}
+
+export interface FinancialMetrics {
+  total_revenue: number;
+  total_carrier_cost: number;
+  net_margin: number;
+  avg_spread_pct: number;
+  avg_discount_pct: number;
+  automation_rate: number;
+  avg_time_to_cover_hours: number;
+  covered_load_count: number;
+  ai_booked_count: number;
 }

@@ -1,12 +1,13 @@
 import { clsx } from 'clsx';
 
-type Status = 'available' | 'pending' | 'covered' | 'cancelled' | 'active' | 'in_review' | 'suspended' | 'inactive' | 'positive' | 'neutral' | 'negative' | 'booked' | 'rejected' | 'no_agreement' | 'transferred' | 'in_progress' | 'carrier_not_authorized' | 'no_loads_available';
+type Status = 'available' | 'pending' | 'covered' | 'cancelled' | 'delivered' | 'active' | 'in_review' | 'suspended' | 'inactive' | 'positive' | 'neutral' | 'negative' | 'booked' | 'rejected' | 'no_agreement' | 'transferred' | 'in_progress' | 'carrier_not_authorized' | 'no_loads_available';
 
 const STATUS_CONFIG: Record<Status, { label: string; className: string }> = {
   available:             { label: 'Available',           className: 'bg-green-500/15 text-green-400 border-green-500/30' },
   pending:               { label: 'Pending',             className: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
   covered:               { label: 'Covered',             className: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
   cancelled:             { label: 'Cancelled',           className: 'bg-red-500/15 text-red-400 border-red-500/30' },
+  delivered:             { label: 'Delivered',           className: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
   active:                { label: 'Active',              className: 'bg-green-500/15 text-green-400 border-green-500/30' },
   in_review:             { label: 'In Review',           className: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
   suspended:             { label: 'Suspended',           className: 'bg-red-500/15 text-red-400 border-red-500/30' },

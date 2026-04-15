@@ -186,11 +186,27 @@ function AllCallsTab() {
                     {expanded === call.id && (
                       <tr className="bg-[#0d0d0d]">
                         <td colSpan={8} className="px-4 py-4">
-                          <div className="space-y-3">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {call.transcript_summary && (
                               <div>
-                                <p className="text-xs text-[#555555] uppercase tracking-wider mb-1">Summary</p>
-                                <p className="text-sm text-[#aaaaaa]">{call.transcript_summary}</p>
+                                <p className="text-[10px] text-[#555555] uppercase tracking-wider mb-1 font-mono-data">Summary</p>
+                                <p className="text-xs text-[#aaaaaa] leading-relaxed">{call.transcript_summary}</p>
+                              </div>
+                            )}
+                            {call.transcript_full && call.transcript_full.length > 0 && (
+                              <div>
+                                <p className="text-[10px] text-[#555555] uppercase tracking-wider mb-2 font-mono-data">Transcript ({call.transcript_full.length} turns)</p>
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                  {call.transcript_full.map((msg, i) => (
+                                    <div key={i} className={`flex gap-2 ${msg.role === 'assistant' ? 'flex-row-reverse' : ''}`}>
+                                      <span className={`text-[10px] font-mono-data px-1.5 py-0.5 rounded shrink-0 self-start ${
+                                        msg.role === 'assistant' ? 'bg-blue-500/15 text-blue-400' :
+                                        msg.role === 'caller' ? 'bg-[#2a2a2a] text-[#888]' : 'bg-amber-500/10 text-amber-500'
+                                      }`}>{msg.role === 'assistant' ? 'AI' : msg.role === 'caller' ? 'CAL' : 'SYS'}</span>
+                                      <p className="text-xs text-[#aaaaaa] leading-relaxed">{msg.message}</p>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </div>

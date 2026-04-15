@@ -203,12 +203,103 @@ function BookingTab({ load }: { load: Load }) {
   );
 }
 
-function ComingSoonTab({ name }: { name: string }) {
+function AccountingTab({ load }: { load: Load }) {
+  const isBooked = load.status === 'covered' || load.status === 'delivered';
+
+  if (!isBooked) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg p-5">
+          <p className="text-xs text-[#555555] uppercase tracking-wider mb-4 font-mono-data">Rate Summary</p>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-[10px] text-[#555555] uppercase tracking-wider mb-1">Loadboard Rate</p>
+              <p className="text-lg font-bold text-white font-mono-data">
+                ${load.total_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-[#555555] uppercase tracking-wider mb-1">Per Mile</p>
+              <p className="text-lg font-bold text-green-400 font-mono-data">
+                ${load.per_mile_rate.toFixed(2)}/mi
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-[#555555] text-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+          Financial data available once load is booked
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center justify-center py-20">
-      <div className="text-center">
-        <p className="text-[#444444] text-sm">{name}</p>
-        <p className="text-[#333333] text-xs mt-1">Coming soon</p>
+    <div className="space-y-4">
+      {/* Core financial metrics */}
+      <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#2a2a2a]">
+          <p className="text-xs text-[#555555] uppercase tracking-wider font-mono-data">Financial Summary</p>
+        </div>
+        <div className="divide-y divide-[#1a1a1a]">
+          <div className="flex items-center justify-between px-5 py-3">
+            <span className="text-sm text-[#888888]">Loadboard Rate</span>
+            <span className="text-sm font-mono-data text-white">
+              ${load.total_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </span>
+          </div>
+          {load.booked_rate != null && (
+            <div className="flex items-center justify-between px-5 py-3">
+              <span className="text-sm text-[#888888]">Booked Rate <span className="text-[#555555] text-xs">(carrier paid)</span></span>
+              <span className="text-sm font-mono-data text-amber-400">
+                ${load.booked_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
+          {load.margin_pct != null && (
+            <div className="flex items-center justify-between px-5 py-3">
+              <span className="text-sm text-[#888888]">Broker Margin</span>
+              <span className={`text-sm font-mono-data font-bold ${load.margin_pct > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {load.margin_pct.toFixed(1)}%
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between px-5 py-3">
+            <span className="text-sm text-[#888888]">Per Mile</span>
+            <span className="text-sm font-mono-data text-[#aaaaaa]">
+              ${load.per_mile_rate.toFixed(2)}/mi
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Booking metadata */}
+      <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden">
+        <div className="px-5 py-3 border-b border-[#2a2a2a]">
+          <p className="text-xs text-[#555555] uppercase tracking-wider font-mono-data">Booking Info</p>
+        </div>
+        <div className="divide-y divide-[#1a1a1a]">
+          <div className="flex items-center justify-between px-5 py-3">
+            <span className="text-sm text-[#888888]">Booking Method</span>
+            <span className={`text-xs font-mono-data px-2 py-0.5 rounded border ${
+              load.is_ai_booked
+                ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                : 'bg-[#2a2a2a] text-[#888] border-[#333]'
+            }`}>
+              {load.is_ai_booked ? 'AI Automated' : 'Manual'}
+            </span>
+          </div>
+          <div className="flex items-center justify-between px-5 py-3">
+            <span className="text-sm text-[#888888]">Status</span>
+            <span className={`text-xs font-mono-data px-2 py-0.5 rounded border ${
+              load.status === 'delivered'
+                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                : 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+            }`}>
+              {load.status.charAt(0).toUpperCase() + load.status.slice(1)}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -311,8 +402,34 @@ export function LoadDetail({ load }: LoadDetailProps) {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto px-6 py-5">
         {activeTab === 'booking' && <BookingTab load={load} />}
-        {activeTab === 'accounting' && <ComingSoonTab name="Accounting" />}
-        {activeTab === 'tracking' && <ComingSoonTab name="Tracking" />}
+        {activeTab === 'accounting' && <AccountingTab load={load} />}
+        {activeTab === 'tracking' && (
+          <div className="space-y-4">
+            <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg p-5">
+              <p className="text-xs text-[#555555] uppercase tracking-wider mb-4 font-mono-data">Shipment Timeline</p>
+              <div className="space-y-3">
+                {[
+                  { label: 'Load Created', date: load.created_at, done: true },
+                  { label: 'Pickup', date: load.pickup_datetime, done: new Date(load.pickup_datetime) < new Date() },
+                  { label: 'In Transit', date: null, done: load.status === 'covered' || load.status === 'delivered' },
+                  { label: 'Delivered', date: load.delivery_datetime, done: load.status === 'delivered' },
+                ].map(({ label, date, done }, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${done ? 'bg-green-400' : 'bg-[#333]'}`} />
+                    <div className="flex-1">
+                      <span className={`text-sm ${done ? 'text-white' : 'text-[#555555]'}`}>{label}</span>
+                    </div>
+                    {date && (
+                      <span className="text-xs font-mono-data text-[#555555]">
+                        {new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

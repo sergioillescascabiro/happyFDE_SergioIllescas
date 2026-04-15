@@ -54,6 +54,17 @@ def test_sentiment_distribution(client):
     data = r.json()
     assert "positive" in data
 
+def test_outcome_distribution(client):
+    r = client.get("/api/metrics/outcome-distribution", headers=HEADERS)
+    assert r.status_code == 200
+    data = r.json()
+    assert isinstance(data, list)
+    assert len(data) > 0
+    assert "outcome" in data[0]
+    assert "count" in data[0]
+    # All counts should be positive
+    assert all(item["count"] > 0 for item in data)
+
 def test_metrics_require_auth(client):
     r = client.get("/api/metrics/overview")
     assert r.status_code == 401

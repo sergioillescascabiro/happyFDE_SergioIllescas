@@ -192,6 +192,15 @@ def get_financial_metrics(db: Session) -> dict:
         "covered_load_count": total_covered,
         "ai_booked_count": ai_booked,
     }
+def get_outcome_distribution(db: Session) -> list:
+    calls = db.query(Call).all()
+    dist: dict = {}
+    for c in calls:
+        outcome = c.outcome.value
+        dist[outcome] = dist.get(outcome, 0) + 1
+    return [{"outcome": k, "count": v} for k, v in sorted(dist.items(), key=lambda x: -x[1])]
+
+
 def get_top_carriers(db: Session, limit: int = 5) -> list:
     """Gets carriers with the most successful bookings."""
     from app.models.carrier import Carrier

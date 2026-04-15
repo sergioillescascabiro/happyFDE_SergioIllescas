@@ -70,6 +70,15 @@ def financial_metrics(
 ):
     from app.services.metrics import get_financial_metrics
     return get_financial_metrics(db)
+@router.get("/outcome-distribution")
+def outcome_distribution(
+    db: Session = Depends(get_db),
+    _: str = Depends(require_dashboard_token),
+):
+    from app.services.metrics import get_outcome_distribution
+    return get_outcome_distribution(db)
+
+
 @router.get("/top-carriers")
 def top_carriers(
     limit: int = Query(5, ge=1, le=20),

@@ -1,4 +1,11 @@
 import { getToken } from './auth';
+import type {
+  CallsOverTimePoint,
+  OutcomeDistribution,
+  NegotiationAnalysis,
+  SentimentDistribution,
+  FinancialMetrics,
+} from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -38,4 +45,24 @@ export async function validateToken(token: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+export async function getCallsOverTime(days = 30): Promise<CallsOverTimePoint[]> {
+  return apiFetch<CallsOverTimePoint[]>(`/api/metrics/calls-over-time?days=${days}`);
+}
+
+export async function getOutcomeDistribution(): Promise<OutcomeDistribution[]> {
+  return apiFetch<OutcomeDistribution[]>('/api/metrics/outcome-distribution');
+}
+
+export async function getNegotiationAnalysis(): Promise<NegotiationAnalysis> {
+  return apiFetch<NegotiationAnalysis>('/api/metrics/negotiation-analysis');
+}
+
+export async function getSentimentDistribution(): Promise<SentimentDistribution> {
+  return apiFetch<SentimentDistribution>('/api/metrics/sentiment');
+}
+
+export async function getFinancialMetrics(): Promise<FinancialMetrics> {
+  return apiFetch<FinancialMetrics>('/api/metrics/financial');
 }
