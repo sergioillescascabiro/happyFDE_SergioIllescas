@@ -24,9 +24,9 @@ function formatDateTime(iso: string): string {
 
 function MetadataChip({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] text-[#555555] uppercase tracking-wider">{label}</span>
-      <span className="text-xs text-white font-mono-data">{value}</span>
+    <div className="flex flex-col gap-1.5 p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 transition-all hover:bg-white/[0.04]">
+      <span className="text-[9px] text-slate-500 font-heading font-bold uppercase tracking-[0.12em]">{label}</span>
+      <span className="text-xs text-slate-100 font-mono-data font-semibold">{value}</span>
     </div>
   );
 }
@@ -107,13 +107,19 @@ function BookingTab({ load }: { load: Load }) {
   return (
     <div className="space-y-6">
       {/* Rate reference for broker */}
-      <div className="text-xs text-[#555555] font-mono-data flex items-center gap-2 bg-[#0d1017] border border-[#2a2d3a] rounded-md px-3 py-2">
-        <span className="text-[#888888]">Loadboard:</span>
-        <span className="text-white">${load.total_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-        <span className="text-[#444]">·</span>
-        <span className="text-green-400">${load.per_mile_rate.toFixed(2)}/mi</span>
-        <span className="text-[#444]">·</span>
-        <span>{load.miles.toFixed(0)} mi</span>
+      <div className="text-[11px] text-slate-400 font-mono-data flex items-center gap-4 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl px-5 py-4">
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Loadboard</span>
+          <span className="text-white font-bold text-base leading-none tracking-tight">${load.total_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+        </div>
+        <div className="w-[1px] h-6 bg-white/10" />
+        <div className="flex items-center gap-2">
+          <span className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">Per Mile</span>
+          <span className="text-emerald-400 font-bold text-base leading-none tracking-tight">${load.per_mile_rate.toFixed(2)}/mi</span>
+        </div>
+        <div className="flex-1 text-right">
+          <span className="text-[10px] text-slate-500 font-medium">{load.miles.toFixed(0)} total miles</span>
+        </div>
       </div>
 
       {/* Recommended Carriers */}
@@ -337,12 +343,12 @@ export function LoadDetail({ load }: LoadDetailProps) {
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="px-6 py-4 border-b border-[#2a2a2a] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <h2 className="text-base font-bold text-white font-mono-data">Load {load.load_id}</h2>
+      <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.01]">
+        <div className="flex items-center gap-4">
+          <h2 className="text-lg font-bold text-white font-heading tracking-tight">Load Ref: <span className="font-mono-data text-emerald-400">{load.load_id}</span></h2>
           <StatusBadge status={load.status} />
         </div>
-        <span className="text-xs text-[#555555]">{load.equipment_type}</span>
+        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.15em] font-heading">{load.equipment_type}</span>
       </div>
 
       {/* Route Info */}
@@ -367,14 +373,14 @@ export function LoadDetail({ load }: LoadDetailProps) {
         </div>
       </div>
 
-      {/* Metadata row */}
-      <div className="px-6 py-3 border-b border-[#2a2a2a] grid grid-cols-3 md:grid-cols-6 gap-3 shrink-0">
+      {/* Metadata grid */}
+      <div className="px-8 py-6 border-b border-white/5 grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 shrink-0 bg-white/[0.005]">
         <MetadataChip label="Equipment" value={load.equipment_type} />
         <MetadataChip label="Commodity" value={load.commodity_type} />
-        <MetadataChip label="Weight" value={`${(load.weight / 1000).toFixed(0)}K lbs`} />
-        <MetadataChip label="Pieces" value={load.num_of_pieces} />
+        <MetadataChip label="Weight (Lbs)" value={`${(load.weight).toLocaleString()} lbs`} />
+        <MetadataChip label="Cargo Pieces" value={load.num_of_pieces} />
         <MetadataChip label="Dimensions" value={load.dimensions ?? '—'} />
-        <MetadataChip label="Ref ID" value={load.reference_id ?? '—'} />
+        <MetadataChip label="Reference ID" value={load.reference_id ?? '—'} />
       </div>
 
       {/* Notes (collapsible) */}

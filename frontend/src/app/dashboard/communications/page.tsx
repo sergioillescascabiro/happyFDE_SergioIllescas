@@ -58,17 +58,19 @@ function LiveTab({ onPickUp }: { onPickUp: (msg: string) => void }) {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex items-center gap-3">
-        <select
-          value={useCaseFilter}
-          onChange={e => setUseCaseFilter(e.target.value)}
-          className="bg-[#111111] border border-[#2a2a2a] text-white text-sm rounded-md px-3 py-2 focus:outline-none focus:border-[#444]"
-        >
-          {useCases.map(uc => (
-            <option key={uc} value={uc}>{uc === 'all' ? 'All Use Cases' : uc}</option>
-          ))}
-        </select>
-        <span className="text-xs text-[#555555]">{filtered.length} calls</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <select
+            value={useCaseFilter}
+            onChange={e => setUseCaseFilter(e.target.value)}
+            className="bg-[#111111] border border-white/10 text-slate-200 text-xs font-semibold rounded-lg px-3 py-2 focus:outline-none transition-all appearance-none pr-8 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%2364748b%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_0.5rem_center]"
+          >
+            {useCases.map(uc => (
+              <option key={uc} value={uc}>{uc === 'all' ? 'All Call Channels' : uc}</option>
+            ))}
+          </select>
+          <span className="text-[10px] font-mono-data text-slate-500 font-bold uppercase tracking-widest">{filtered.length} active sessions</span>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -152,13 +154,13 @@ function AllCallsTab() {
       {loading ? (
         <PageLoader />
       ) : (
-        <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden">
+        <div className="glass-card rounded-2xl overflow-hidden border-white/5">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-[#2a2a2a]">
-                  {['Date', 'Carrier', 'MC#', 'Load', 'Direction', 'Outcome', 'Sentiment', 'Duration'].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-[10px] text-[#555555] uppercase tracking-wider whitespace-nowrap">{h}</th>
+                <tr className="bg-white/[0.02]">
+                  {['Date/Time', 'Carrier Identity', 'MC Number', 'Cargo Item', 'Direction', 'Call Outcome', 'Sentiment', 'Duration'].map(h => (
+                    <th key={h} className="text-left px-5 py-4 text-slate-500 text-[9px] font-heading font-bold uppercase tracking-widest border-b border-white/5">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -257,10 +259,15 @@ export default function CommunicationsPage() {
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <MessageSquare className="w-5 h-5 text-[#555555]" />
-          <h1 className="text-lg font-semibold text-white">Communications</h1>
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-emerald-500/10 rounded-lg">
+            <MessageSquare className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-heading font-bold text-white tracking-tight">Communication Logs</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Automated carrier negotiations & inquiry transcripts</p>
+          </div>
         </div>
       </div>
 

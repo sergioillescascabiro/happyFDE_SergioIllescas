@@ -81,10 +81,10 @@ interface ManualFormErrors {
   shipper_id?: string;
 }
 
-const INPUT_CLS = 'bg-[#0d1017] border border-[#2a2d3a] text-white text-sm rounded-md px-3 py-2 w-full focus:outline-none focus:border-[#3b82f6]';
-const LABEL_CLS = 'text-xs text-[#888888] mb-1 block';
-const ERROR_CLS = 'text-xs text-red-400 mt-1';
-const REQ = <span className="text-red-400 ml-0.5">*</span>;
+const INPUT_CLS = 'bg-white/[0.03] border border-white/10 text-slate-100 text-sm rounded-lg px-4 py-2.5 w-full focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all font-sans';
+const LABEL_CLS = 'text-[10px] font-heading font-bold text-slate-500 mb-1.5 block uppercase tracking-wider';
+const ERROR_CLS = 'text-[10px] text-rose-400 mt-1 font-medium';
+const REQ = <span className="text-rose-500 ml-1">*</span>;
 
 interface UploadModalProps {
   onClose: () => void;
@@ -253,15 +253,15 @@ function UploadModal({ onClose, onSuccess }: UploadModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#111318] border border-[#2a2d3a] rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-[#030303]/80 backdrop-filter blur-sm border-white/5 border flex items-center justify-center z-50 p-4">
+      <div className="glass-card rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#2a2d3a]">
+        <div className="flex items-center justify-between px-8 py-5 border-b border-white/5">
           <div>
-            <h2 className="text-base font-semibold text-white">Upload Loads</h2>
-            <p className="text-xs text-[#555555] mt-0.5">Import from CSV or enter manually</p>
+            <h2 className="text-xl font-heading font-bold text-white tracking-tight">Post New Loads</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Automate your lifecycle by importing cargo data</p>
           </div>
-          <button onClick={onClose} className="text-[#555555] hover:text-white transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full text-slate-500 hover:text-white transition-all">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -678,20 +678,24 @@ export default function LoadsPage() {
   };
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col bg-[#030303]">
       {/* Page header */}
-      <div className="px-6 py-4 border-b border-[#2a2a2a] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-3">
-          <Package className="w-5 h-5 text-[#555555]" />
-          <h1 className="text-lg font-semibold text-white">Loads</h1>
-          <span className="text-xs text-[#555555] font-mono-data bg-[#1a1a1a] px-2 py-0.5 rounded">{total}</span>
+      <div className="px-8 py-5 border-b border-white/5 flex items-center justify-between shrink-0 bg-white/[0.01]">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-emerald-500/10 rounded-lg">
+            <Package className="w-5 h-5 text-emerald-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-heading font-bold text-white tracking-tight">Cargo Management</h1>
+            <p className="text-xs text-slate-500 mt-0.5">{total} active shipments found</p>
+          </div>
         </div>
         <button
           onClick={() => setShowUploadModal(true)}
-          className="flex items-center gap-2 bg-white/10 hover:bg-white/15 text-white text-sm px-3 py-2 rounded-md transition-colors"
+          className="flex items-center gap-2 bg-emerald-500 text-[#030303] text-xs font-bold font-heading uppercase tracking-wider px-5 py-2.5 rounded-full hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/10"
         >
           <Upload className="w-4 h-4" />
-          Upload Loads
+          Import Cargo
         </button>
       </div>
 

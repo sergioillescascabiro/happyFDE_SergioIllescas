@@ -11,6 +11,7 @@ import {
   MetricsOverview, Shipper, Load, Quote, Carrier,
   CallsOverTimePoint, OutcomeDistribution, NegotiationAnalysis, SentimentDistribution, AgentPerformance,
 } from '@/types';
+import { clsx } from 'clsx';
 import { KPICard } from '@/components/ui/KPICard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { PageLoader } from '@/components/ui/LoadingSpinner';
@@ -32,31 +33,31 @@ function isLate(load: Load): boolean {
 function ActiveLoadCard({ load }: { load: Load }) {
   const late = isLate(load);
   return (
-    <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg p-4 hover:border-[#3a3a3a] transition-colors">
+    <div className="glass-card rounded-xl p-4 hover:border-emerald-500/20 transition-all hover:translate-y-[-1px] group animate-in">
       <div className="flex items-start justify-between gap-2 mb-3">
         <div>
-          <p className="text-xs text-[#555555] font-mono-data">{load.load_id}</p>
+          <p className="text-[10px] text-slate-500 font-mono-data uppercase tracking-tight">{load.load_id}</p>
           <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="text-sm font-medium text-white truncate max-w-[120px]">{load.origin}</span>
-            <span className="text-[#555555] text-xs">→</span>
-            <span className="text-sm font-medium text-white truncate max-w-[120px]">{load.destination}</span>
+            <span className="text-sm font-semibold text-white truncate max-w-[120px]">{load.origin}</span>
+            <span className="text-slate-600 text-xs">→</span>
+            <span className="text-sm font-semibold text-white truncate max-w-[120px]">{load.destination}</span>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1">
           <StatusBadge status={load.status} />
           {late && (
-            <span className="text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/30 px-1.5 py-0.5 rounded font-mono-data">
+            <span className="text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full font-mono-data">
               LATE
             </span>
           )}
         </div>
       </div>
-      <div className="flex items-center gap-3 text-xs text-[#666666]">
-        <span className="font-mono-data">{load.equipment_type}</span>
-        <span>·</span>
+      <div className="flex items-center gap-3 text-[11px] text-slate-500 font-medium">
+        <span className="font-mono-data bg-white/5 px-1.5 py-0.5 rounded">{load.equipment_type}</span>
+        <span className="opacity-30">|</span>
         <span>{formatDate(load.pickup_datetime)}</span>
-        <span>·</span>
-        <span className="font-mono-data">${load.per_mile_rate.toFixed(2)}/mi</span>
+        <span className="opacity-30">|</span>
+        <span className="font-mono-data text-emerald-400/90">${load.per_mile_rate.toFixed(2)}/mi</span>
       </div>
     </div>
   );
@@ -86,7 +87,7 @@ const OUTCOME_LABELS: Record<string, string> = {
 
 function SectionHeader({ title }: { title: string }) {
   return (
-    <p className="text-[10px] font-mono-data text-[#555555] uppercase tracking-widest mb-3">{title}</p>
+    <p className="text-[10px] font-heading font-semibold text-slate-500 uppercase tracking-[0.15em] mb-4">{title}</p>
   );
 }
 
@@ -141,73 +142,89 @@ function PaulPerformanceCard({ data }: { data: AgentPerformance }) {
   const deltaPositive = data.margin_delta_pct >= 0;
 
   return (
-    <div className="relative flex bg-gradient-to-r from-[#0d1a12] to-[#111318] border border-[#10b981]/30 rounded-lg p-5 overflow-hidden">
-      {/* Left accent bar */}
-      <div className="w-1 bg-[#10b981] rounded-full shrink-0 mr-5" />
-
-      <div className="flex-1 min-w-0">
+    <div className="relative flex bg-gradient-to-br from-emerald-500/10 via-[#030303] to-[#030303] border border-emerald-500/20 rounded-2xl p-6 overflow-hidden animate-in">
+      {/* Decorative grain/shimmer */}
+      <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
+      
+      <div className="flex-1 min-w-0 z-10">
         {/* Header row */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Bot className="w-5 h-5 text-[#10b981]" />
-            <span className="text-lg font-bold text-white tracking-tight">PAUL — AI FREIGHT AGENT</span>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-emerald-500/10 rounded-lg">
+              <Bot className="w-5 h-5 text-emerald-400" />
+            </div>
+            <div>
+              <span className="text-xl font-heading font-bold text-white tracking-tight">Paul</span>
+              <span className="ml-2 text-[10px] font-mono-data text-emerald-400/60 bg-emerald-400/10 px-2 py-0.5 rounded-full uppercase">AI Agent</span>
+            </div>
           </div>
-          <span className="text-xs font-mono-data bg-[#10b981]/15 text-[#10b981] border border-[#10b981]/30 px-2.5 py-1 rounded-full whitespace-nowrap">
-            Automation: {data.automation_rate.toFixed(1)}%
-          </span>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider">Automation</p>
+              <p className="text-sm font-mono-data text-white">{data.automation_rate.toFixed(1)}%</p>
+            </div>
+            <div className="w-[1px] h-8 bg-white/10" />
+            <div className="text-right">
+              <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider flex items-center justify-end gap-1">
+                vs Manual {deltaPositive ? <TrendingUp className="w-2.5 h-2.5 text-emerald-400" /> : null}
+              </p>
+              <p className={`text-sm font-mono-data ${deltaPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {deltaPositive ? '+' : ''}{data.margin_delta_pct.toFixed(1)}%
+              </p>
+            </div>
+          </div>
         </div>
 
         {noData ? (
-          <p className="text-sm text-[#555555] italic py-2">
+          <p className="text-sm text-slate-500 italic py-2">
             No AI-booked loads yet — Paul is ready to negotiate
           </p>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {/* Margin Achieved */}
-            <div>
-              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">Margin Achieved</p>
-              <p className="text-3xl font-bold font-mono-data text-green-400">
-                {data.ai.avg_margin_pct.toFixed(1)}%
+            <div className="space-y-2">
+              <p className="text-[10px] text-slate-500 uppercase font-heading font-bold tracking-wider">Avg Margin</p>
+              <p className="text-4xl font-bold font-mono-data text-emerald-400 tracking-tighter">
+                {data.ai.avg_margin_pct.toFixed(1)}<span className="text-xl ml-0.5">%</span>
               </p>
-              {/* Margin bar */}
-              <div className="mt-2 h-1.5 rounded-full bg-[#1a2a1a] overflow-hidden">
+              <div className="mt-2 h-1 rounded-full bg-white/5 overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-[#10b981] to-[#34d399] rounded-full transition-all"
+                  className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300 rounded-full transition-all duration-1000"
                   style={{ width: `${Math.min(100, data.ai.avg_margin_pct * 4)}%` }}
                 />
               </div>
             </div>
 
-            {/* Delta vs Manual */}
-            <div>
-              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">vs Manual</p>
-              <p className={`text-3xl font-bold font-mono-data ${deltaPositive ? 'text-green-400' : 'text-red-400'}`}>
-                {deltaPositive ? '+' : ''}{data.margin_delta_pct.toFixed(1)}%
-                <span className="text-lg ml-1">{deltaPositive ? '↑' : '↓'}</span>
-              </p>
-              <p className="text-[10px] text-[#555555] mt-2 font-mono-data">
-                Manual avg: {data.manual.avg_margin_pct.toFixed(1)}%
-              </p>
-            </div>
-
             {/* Loads Booked */}
-            <div>
-              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">Loads Booked</p>
-              <p className="text-3xl font-bold font-mono-data text-white">{data.ai.count}</p>
-              <p className="text-[10px] text-[#555555] mt-2 font-mono-data">
+            <div className="space-y-2">
+              <p className="text-[10px] text-slate-500 uppercase font-heading font-bold tracking-wider">Total Booked</p>
+              <p className="text-4xl font-bold font-mono-data text-white tracking-tighter">{data.ai.count}</p>
+              <p className="text-[10px] text-slate-500 font-mono-data">
                 of {data.ai.count + data.manual.count} total
               </p>
             </div>
 
             {/* Revenue */}
-            <div>
-              <p className="text-[10px] text-[#555555] uppercase tracking-widest mb-1">Revenue</p>
-              <p className="text-3xl font-bold font-mono-data text-white">
+            <div className="space-y-2">
+              <p className="text-[10px] text-slate-500 uppercase font-heading font-bold tracking-wider">Revenue</p>
+              <p className="text-4xl font-bold font-mono-data text-white tracking-tighter">
                 {formatCurrency(data.ai.total_booked_revenue)}
               </p>
-              <p className="text-[10px] text-[#555555] mt-2 font-mono-data">
+              <p className="text-[10px] text-slate-500 font-mono-data">
                 avg {formatCurrency(data.ai.avg_booked_rate)}/load
               </p>
+            </div>
+
+            {/* Manual Comparison */}
+            <div className="space-y-2 bg-white/5 p-3 rounded-xl border border-white/5">
+              <p className="text-[9px] text-slate-500 uppercase font-heading font-bold tracking-wider">Manual Performance</p>
+              <div className="flex items-center justify-between">
+                <p className="text-lg font-bold font-mono-data text-slate-300">{data.manual.avg_margin_pct.toFixed(1)}%</p>
+                <div className="text-[9px] text-slate-500 font-mono-data text-right">
+                  {data.manual.count} loads<br />
+                  {formatCurrency(data.manual.total_booked_revenue)}
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -326,26 +343,27 @@ export default function OverviewPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Acme Logistics</h1>
-          <p className="text-[#555555] text-sm mt-0.5">Freight Operations Overview</p>
+          <h1 className="text-2xl font-heading font-bold text-white tracking-tight">Executive Dashboard</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Freight Brokerage Performance & Lifecycle</p>
         </div>
         <div className="flex items-center gap-3">
           {/* Shipper filter */}
           <select
             value={selectedShipper}
             onChange={(e) => setSelectedShipper(e.target.value)}
-            className="bg-[#111111] border border-[#2a2a2a] text-white text-sm rounded-md px-3 py-2 focus:outline-none focus:border-[#444]"
+            className="bg-[#111111] border border-white/10 text-slate-200 text-xs font-medium rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 transition-all appearance-none pr-8 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22none%22%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%3E%3Cpath%20d%3D%22M5%207L10%2012L15%207%22%20stroke%3D%22%2364748b%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_0.5rem_center]"
           >
-            <option value="all">All Shippers</option>
+            <option value="all">Global (All Shippers)</option>
             {shippers.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
           <button
             onClick={loadData}
-            className="p-2 rounded-md border border-[#2a2a2a] text-[#888] hover:text-white hover:border-[#444] transition-colors"
+            className="p-2 rounded-lg border border-white/10 text-slate-500 hover:text-white hover:bg-white/5 transition-all"
+            title="Reload Data"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={clsx('w-4 h-4', loading && 'animate-spin')} />
           </button>
         </div>
       </div>
@@ -673,39 +691,47 @@ export default function OverviewPage() {
 
       {/* Quotes Table */}
       <div>
-        <h2 className="text-sm font-semibold text-white uppercase tracking-wider mb-4">Lane Quotes</h2>
-        <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden">
+        <h2 className="text-xs font-heading font-bold text-slate-500 uppercase tracking-[0.15em] mb-4">Lane Quotes & Market Pulse</h2>
+        <div className="glass-card rounded-2xl overflow-hidden border-white/5">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-[#2a2a2a]">
+                <tr className="bg-white/[0.02]">
                   {['Lane', 'Equipment', 'Market Rate', 'Quoted Rate', 'Status'].map(h => (
-                    <th key={h} className="text-left px-4 py-3 text-[#555555] text-xs uppercase tracking-wider">{h}</th>
+                    <th key={h} className="text-left px-5 py-4 text-slate-500 text-[10px] font-heading font-bold uppercase tracking-widest border-b border-white/5">{h}</th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#1a1a1a]">
+              <tbody className="divide-y divide-white/5">
                 {quotes.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-4 py-8 text-center">
-                      <div className="flex flex-col items-center justify-center py-4 text-[#555555]">
-                        <FileText className="w-8 h-8 mb-2 opacity-30" />
-                        <p className="text-sm">No quotes available</p>
+                      <div className="flex flex-col items-center justify-center py-8 text-slate-600">
+                        <FileText className="w-10 h-10 mb-3 opacity-20" />
+                        <p className="text-sm font-medium">No market quotes indexed</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   quotes.map(q => (
-                    <tr key={q.id} className="hover:bg-white/5 transition-colors">
-                      <td className="px-4 py-3">
-                        <span className="text-sm text-white">{q.origin}</span>
-                        <span className="text-[#555555] mx-1.5 text-xs">→</span>
-                        <span className="text-sm text-white">{q.destination}</span>
+                    <tr key={q.id} className="hover:bg-white/[0.02] transition-colors group">
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold text-slate-200">{q.origin}</span>
+                          <span className="text-slate-600 text-[10px]">→</span>
+                          <span className="text-sm font-semibold text-slate-200">{q.destination}</span>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-[#888888] font-mono-data">{q.equipment_type}</td>
-                      <td className="px-4 py-3 text-sm font-mono-data text-[#888888]">${q.market_rate.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-sm font-mono-data text-white">${q.quoted_rate.toFixed(2)}</td>
-                      <td className="px-4 py-3"><StatusBadge status={q.status} /></td>
+                      <td className="px-5 py-4">
+                        <span className="text-xs font-mono-data text-slate-500">{q.equipment_type}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm font-mono-data text-slate-500">${q.market_rate.toFixed(2)}</span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="text-sm font-mono-data text-white font-bold tracking-tight">${q.quoted_rate.toFixed(2)}</span>
+                      </td>
+                      <td className="px-5 py-4"><StatusBadge status={q.status} /></td>
                     </tr>
                   ))
                 )}

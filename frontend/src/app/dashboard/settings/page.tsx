@@ -6,20 +6,20 @@ import { getToken } from '@/lib/auth';
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[#111111] border border-[#2a2a2a] rounded-lg overflow-hidden">
-      <div className="px-5 py-3 border-b border-[#2a2a2a]">
-        <h2 className="text-xs font-semibold text-[#888888] uppercase tracking-wider">{title}</h2>
+    <div className="glass-card rounded-2xl overflow-hidden border-white/5 shadow-xl">
+      <div className="px-6 py-4 border-b border-white/5 bg-white/[0.01]">
+        <h2 className="text-[10px] font-heading font-bold text-slate-500 uppercase tracking-[0.15em]">{title}</h2>
       </div>
-      <div className="p-5 space-y-4">{children}</div>
+      <div className="p-6 space-y-5">{children}</div>
     </div>
   );
 }
 
 function InfoRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-sm text-[#888888]">{label}</span>
-      <span className={`text-sm text-white ${mono ? 'font-mono-data' : ''}`}>{value}</span>
+    <div className="flex items-center justify-between py-1.5 group">
+      <span className="text-sm text-slate-500 group-hover:text-slate-400 transition-colors">{label}</span>
+      <span className={`text-sm text-slate-200 ${mono ? 'font-mono-data opacity-80' : 'font-medium'}`}>{value}</span>
     </div>
   );
 }
@@ -30,11 +30,16 @@ export default function SettingsPage() {
   const maskedToken = token ? `${token.slice(0, 6)}${'•'.repeat(Math.max(0, token.length - 10))}${token.slice(-4)}` : '(not set)';
 
   return (
-    <div className="p-6 space-y-6 max-w-2xl">
+    <div className="p-10 space-y-8 max-w-3xl">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <Settings className="w-5 h-5 text-[#555555]" />
-        <h1 className="text-lg font-semibold text-white">Settings</h1>
+      <div className="flex items-center gap-5">
+        <div className="p-3 bg-white/[0.03] rounded-2xl border border-white/10 shadow-inner">
+          <Settings className="w-6 h-6 text-slate-400" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-white tracking-tight">System Configuration</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Manage your platform parameters and security keys</p>
+        </div>
       </div>
 
       {/* Authentication */}
