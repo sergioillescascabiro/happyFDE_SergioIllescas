@@ -31,12 +31,12 @@ def test_agent_load_search_no_filters(client):
 
 
 def test_agent_load_search_by_origin(client):
-    """Filter by origin=Charlotte returns a load from Charlotte."""
-    r = client.get("/api/agent/loads/search?origin=Charlotte", headers=AGENT_HEADERS)
+    """Filter by origin=Dallas returns a load from Dallas."""
+    r = client.get("/api/agent/loads/search?origin=Dallas", headers=AGENT_HEADERS)
     assert r.status_code == 200
     data = r.json()
     assert isinstance(data, dict)
-    assert "Charlotte" in data["origin"]
+    assert "Dallas" in data["origin"]
 
 
 def test_agent_load_search_by_equipment(client):

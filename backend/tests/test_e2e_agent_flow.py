@@ -276,8 +276,8 @@ def test_e2e_full_agent_call_flow(client, monkeypatch):
     assert dashboard_call["transferred_to_rep"] is True
     # Transcript should have 4 entries from step 5
     assert len(dashboard_call.get("transcript_full") or []) == 4
-    # Negotiations should be linked
-    assert len(dashboard_call.get("negotiations") or []) == 3
+    # Negotiations should be linked (3 rounds, or 4 if ultimatum path was taken)
+    assert len(dashboard_call.get("negotiations") or []) == expected_rounds
     _assert_no_rate_leak(dashboard_call)
 
     # ── Step 13: Verify dashboard metrics include this call ──────────────────
