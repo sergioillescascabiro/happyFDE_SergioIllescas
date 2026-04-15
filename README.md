@@ -1,72 +1,59 @@
-# HappyFDE — Developer Guide (Engineering Branch)
+# HappyFDE — Freight Decision Engine (Acme Logistics)
 
-Welcome to the **Development** branch. This branch is optimized for high-velocity iteration using industry-standard hybrid development patterns.
+HappyFDE is a production-ready freight brokerage platform designed to automate carrier negotiations and provide real-time executive visibility into logistics operations.
 
-## 🛠️ Local Development Environment
+## 🏗️ Technical Architecture
 
-We use a decoupled architecture where parts of the stack can run locally or point to remote infrastructure.
+The platform is built on a modern, decoupled stack designed for high availability and security:
 
-### 1. The Database (Dockerized)
+*   **Backend**: Python 3.12 (FastAPI) with SQLAlchemy 2.0.
+*   **Frontend**: Next.js 14+ (React) with Vanilla CSS and high-density data visualizations.
+*   **Database**: PostgreSQL 16 (Google Cloud SQL) on a private network via VPC Peering.
+*   **Infrastructure**: Fully governed by **Terraform** (IaC).
+*   **Deployment**: Serverless on **Google Cloud Run** using Artifact Registry.
 
-Instead of installing PostgreSQL natively, we run it in a container.
+## 🌟 Key Features
 
-```bash
-docker run -d \
-  --name happyfde-db \
-  -p 5433:5432 \
-  -e POSTGRES_DB=happyrobot \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  postgres:16-alpine
-```
+### 1. AI Negotiation Engine (Paul)
+Automated negotiation logic that handles carrier offers, computes margins in real-time, and makes intelligent counter-offers based on target spreads and historical data.
 
-### 2. Hybrid Development Modes
+### 2. Executive Pulsation Dashboard
+A high-fidelity interface designed for data-driven decisions:
+*   **Carrier Outcome Analysis**: Real-time distribution of wins vs losses.
+*   **Margin Tracking**: Instant visibility into operational profitability.
+*   **Live Communication Feed**: Full audit trail of AI-carrier interactions.
 
-Configure your environment by copying `.env.example` in both folders.
+## 🚀 Getting Started
 
-#### Mode A: Full Local (Backend + Frontend)
+### Local Setup (Development)
 
-- **Use case:** Working on end-to-end features or database schema changes.
-- **Setup:** Both apps point to `localhost`.
+Ensure you have **Docker** and **uv** (for Python) installed.
 
-#### Mode B: Frontend Only (Remote API)
+1.  **Infrastructure**:
+    ```bash
+    docker run -d --name happyfde-db -p 5433:5432 -e POSTGRES_DB=happyrobot -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
+    ```
 
-- **Use case:** Working exclusively on UI/UX improvements without running the backend.
-- **Setup:** Change `frontend/.env` to point to the production API URL.
+2.  **Backend**:
+    ```bash
+    cd backend
+    uv sync
+    uv run python -m app.seed  # Populate local DB with standard load data
+    uv run uvicorn app.main:app --reload
+    ```
 
-#### Mode C: Backend Only (Remote DB)
+3.  **Frontend**:
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
 
-- **Use case:** Testing production data locally or debugging cloud-specific issues.
-- **Setup:** Change `backend/.env` to point to the Cloud SQL instance (requires auth).
+## 🔐 Security & Operations
+
+*   **Secret Management**: Production secrets are managed via Google Secret Manager.
+*   **Private Networking**: The database is inaccessible from the public internet, using Google's Service Networking for internal communication.
+*   **Observability**: Integrated with Google Cloud Logging for real-time traffic analysis.
 
 ---
-
-## 🚀 Execution Commands
-
-### Backend (Python/FastAPI)
-
-Using `uv` for ultra-fast dependency management.
-
-```bash
-cd backend
-uv sync
-uv run python -m app.seed  # Re-seed with fresh industry-standard data
-uv run uvicorn app.main:app --reload
-```
-
-### Frontend (Vite/React)
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-## 🧪 Testing
-
-Run the comprehensive test suite to ensure no regressions in negotiation logic.
-
-```bash
-cd backend
-uv run pytest
-```
+Developed for **Acme Logistics** technical challenge.

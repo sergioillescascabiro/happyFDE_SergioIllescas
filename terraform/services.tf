@@ -67,6 +67,11 @@ resource "google_cloud_run_v2_service" "backend" {
         name  = "FMCSA_MOCK"
         value = "false"
       }
+
+      env {
+        name  = "APP_ENV"
+        value = "production"
+      }
     }
   }
 
