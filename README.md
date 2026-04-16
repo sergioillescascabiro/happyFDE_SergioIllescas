@@ -1,59 +1,183 @@
-# HappyFDE — Freight Decision Engine (Acme Logistics)
+# HappyFDE — AI-Driven Freight Brokerage Platform
 
-HappyFDE is a production-ready freight brokerage platform designed to automate carrier negotiations and provide real-time executive visibility into logistics operations.
+Automate inbound carrier sales with a voice AI agent, real-time FMCSA verification, stateful price negotiation, and an executive monitoring dashboard.
 
-## 🏗️ Technical Architecture
+## 🚀 Business Value Proposition
 
-The platform is built on a modern, decoupled stack designed for high availability and security:
+HappyFDE bridges the gap between raw logistics data and profitable carrier negotiations. The platform integrates a voice AI agent (Paul) with industry-standard cargo intelligence to reduce operational overhead and maximize broker spreads.
 
-*   **Backend**: Python 3.12 (FastAPI) with SQLAlchemy 2.0.
-*   **Frontend**: Next.js 14+ (React) with Vanilla CSS and high-density data visualizations.
-*   **Database**: PostgreSQL 16 (Google Cloud SQL) on a private network via VPC Peering.
-*   **Infrastructure**: Fully governed by **Terraform** (IaC).
-*   **Deployment**: Serverless on **Google Cloud Run** using Artifact Registry.
+### Key Operational Features
+
+- **AI Voice Agent (Paul)**: Handles inbound carrier calls end-to-end — verifies authority, searches loads, negotiates price, and books — without human intervention.
+- **Stateful Negotiation Engine**: Multi-round pricing logic anchored to market rates, with automatic margin protection and scam detection.
+- **Executive Dashboard**: Real-time monitoring of net profit, conversion rates, automation rate, and live call transcripts.
+- **FMCSA Integration**: Instant carrier authority verification with 24-hour caching.
+- **Strategic Privacy Guard**: Shipper category exposure model prevents broker-client data leakage.
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph TD
+    subgraph "Frontend (Executive Dashboard)"
+        A[Next.js 16 / React 18]
+    end
+
+    subgraph "Backend (Logic Engine)"
+        B[FastAPI — Python 3.12]
+        C[Negotiation Engine]
+        D[FMCSA Service]
+    end
+
+    subgraph "Data Store"
+        E[(PostgreSQL 16)]
+    end
+
+    subgraph "External Systems"
+        F[HappyRobot Voice Agent]
+        G[FMCSA Public API]
+    end
+
+    A <-->|X-Dashboard-Token| B
+    B <--> E
+    B <--> C
+    B <--> D
+    D <--> G
+    F <-->|X-Agent-Key| B
+```
+
+### Stack
+
+| Layer          | Technology                                          |
+| -------------- | --------------------------------------------------- |
+| Backend        | Python 3.12, FastAPI, SQLAlchemy 2.0, Alembic       |
+| Frontend       | Next.js 16, React 18, TypeScript, Tailwind, Recharts|
+| Database       | PostgreSQL 16                                       |
+| Infrastructure | Docker, Terraform, GCP Cloud Run + Cloud SQL        |
+| Testing        | pytest (backend), Jest + RTL (frontend)             |
+
+### Deployment
+
+- **Containers**: Multi-stage Dockerfiles for backend and frontend.
+- **Cloud**: Google Cloud Run (serverless) + Cloud SQL (PostgreSQL) on a private VPC.
+- **IaC**: Full Terraform configuration in [`/terraform`](./terraform).
+- **Secrets**: Google Secret Manager for production credentials.
+
+---
 
 ## 🌟 Key Features
 
 ### 1. AI Negotiation Engine (Paul)
-Automated negotiation logic that handles carrier offers, computes margins in real-time, and makes intelligent counter-offers based on target spreads and historical data.
+
+Stateful, profit-maximising negotiation across up to 4 rounds:
+
+- **Round 1**: Anchors at the posted loadboard rate.
+- **Round 2**: Moves to the midpoint between loadboard and max rate.
+- **Round 3**: Issues ultimatum at the broker's ceiling (`max_rate`).
+- **Round 4+**: Accepts if within ceiling, rejects otherwise.
+- Carrier's offer is checked against the previous counter on every round — no phantom counters.
+- Scam detection: offers below the floor are accepted but flagged internally.
 
 ### 2. Executive Pulsation Dashboard
-A high-fidelity interface designed for data-driven decisions:
-*   **Carrier Outcome Analysis**: Real-time distribution of wins vs losses.
-*   **Margin Tracking**: Instant visibility into operational profitability.
-*   **Live Communication Feed**: Full audit trail of AI-carrier interactions.
 
-## 🚀 Getting Started
+High-density interface for data-driven decisions:
 
-### Local Setup (Development)
+- **KPI Panel**: Revenue, net margin %, automation rate, avg time-to-cover.
+- **Carrier Outcome Analysis**: Real-time distribution of booked vs no-agreement vs rejected.
+- **Live Communication Feed**: Live transcripts of active calls with SSE push (2s interval).
+- **Loads Management**: Two-panel view with searchable list and detailed load tabs.
 
-Ensure you have **Docker** and **uv** (for Python) installed.
+### 3. Dual Authentication
 
-1.  **Infrastructure**:
-    ```bash
-    docker run -d --name happyfde-db -p 5433:5432 -e POSTGRES_DB=happyrobot -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16-alpine
-    ```
+- `X-Agent-Key` — voice agent access only (never grants admin).
+- `X-Dashboard-Token` — AES-encrypted in localStorage, dashboard only.
 
-2.  **Backend**:
-    ```bash
-    cd backend
-    uv sync
-    uv run python -m app.seed  # Populate local DB with standard load data
-    uv run uvicorn app.main:app --reload
-    ```
+---
 
-3.  **Frontend**:
-    ```bash
-    cd frontend
-    npm install
-    npm run dev
-    ```
+## 🚀 Getting Started (Local)
+
+**Prerequisites**: Docker, Python 3.12+, Node.js 20+, [`uv`](https://github.com/astral-sh/uv)
+
+### 1. Database
+
+```bash
+docker run -d --name happyfde-db \
+  -p 5433:5432 \
+  -e POSTGRES_DB=happyrobot \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  postgres:16-alpine
+```
+
+### 2. Backend
+
+```bash
+cd backend
+cp .env.example .env        # configure FMCSA_API_KEY if needed
+uv sync
+uv run alembic upgrade head
+uv run python -m app.seed   # loads 36 loads, 18 carriers, 4 shippers
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+### 3. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev                 # http://localhost:3000
+```
+
+### 4. Full stack with Docker Compose
+
+```bash
+docker compose up --build
+# API       → http://localhost:8000
+# Dashboard → http://localhost:3000
+```
+
+### Default credentials (dev)
+
+| Key              | Value                                    |
+| ---------------- | ---------------------------------------- |
+| `AGENT_API_KEY`  | `hr-agent-key-change-in-production`      |
+| `DASHBOARD_TOKEN`| `hr-dashboard-token-change-in-production`|
+
+---
+
+## 🧪 Tests
+
+```bash
+# Backend (107 tests)
+cd backend && uv run pytest -v
+
+# Frontend (18 tests)
+cd frontend && npm test
+```
+
+---
 
 ## 🔐 Security & Operations
 
-*   **Secret Management**: Production secrets are managed via Google Secret Manager.
-*   **Private Networking**: The database is inaccessible from the public internet, using Google's Service Networking for internal communication.
-*   **Observability**: Integrated with Google Cloud Logging for real-time traffic analysis.
+- **Private Networking**: Cloud SQL is inaccessible from the public internet via Google VPC peering.
+- **Secret Management**: All production credentials live in Google Secret Manager.
+- **Rate field isolation**: `max_rate` and `min_rate` are stored in DB but excluded from every API response schema.
+- **Observability**: Google Cloud Logging for real-time traffic analysis.
 
 ---
-Developed for **Acme Logistics** technical challenge.
+
+## 📂 Project Structure
+
+```text
+happyFDE/
+├── backend/          # FastAPI app, models, services, migrations
+├── frontend/         # Next.js dashboard
+├── terraform/        # GCP infrastructure (Cloud Run, Cloud SQL, VPC)
+├── docker-compose.yml
+└── DEPLOYMENT.md     # Production deployment guide
+```
+
+---
+
+*Developed for the HappyRobot FDE Technical Challenge — Acme Logistics.*
