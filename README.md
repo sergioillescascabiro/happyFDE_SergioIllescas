@@ -68,18 +68,7 @@ graph TD
 
 ## 🌟 Key Features
 
-### 1. AI Negotiation Engine (Paul)
-
-Stateful, profit-maximising negotiation across up to 4 rounds:
-
-- **Round 1**: Anchors at the posted loadboard rate.
-- **Round 2**: Moves to the midpoint between loadboard and max rate.
-- **Round 3**: Issues ultimatum at the broker's ceiling (`max_rate`).
-- **Round 4+**: Accepts if within ceiling, rejects otherwise.
-- Carrier's offer is checked against the previous counter on every round — no phantom counters.
-- Scam detection: offers below the floor are accepted but flagged internally.
-
-### 2. Executive Pulsation Dashboard
+### 1. Executive Pulsation Dashboard
 
 High-density interface for data-driven decisions:
 
@@ -88,7 +77,7 @@ High-density interface for data-driven decisions:
 - **Live Communication Feed**: Live transcripts of active calls with SSE push (2s interval).
 - **Loads Management**: Two-panel view with searchable list and detailed load tabs.
 
-### 3. Dual Authentication
+### 2. Dual Authentication
 
 - `X-Agent-Key` — voice agent access only (never grants admin).
 - `X-Dashboard-Token` — AES-encrypted in localStorage, dashboard only.
