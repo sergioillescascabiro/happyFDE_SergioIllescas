@@ -37,7 +37,7 @@ describe('LoadCard', () => {
       <LoadCard load={mockLoad} isSelected={true} onClick={() => {}} />
     );
     const btn = container.querySelector('button');
-    expect(btn?.className).toContain('border-l-white');
+    expect(btn?.className).toContain('bg-emerald-500');
   });
 
   it('calls onClick when clicked', async () => {

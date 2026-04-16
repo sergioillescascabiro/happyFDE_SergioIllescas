@@ -80,12 +80,16 @@ class TestFinancialMetrics:
         data = r.json()
         assert 0.0 <= data["automation_rate"] <= 100.0
 
-    def test_quoted_rate_not_in_load_response(self, client):
-        """quoted_rate must never appear in load responses (broker-only data in Quote)"""
+    def test_quoted_rate_in_load_response(self, client):
+        """quoted_rate must appear in load responses (broker dashboard needs shipper price)"""
         r = client.get("/api/loads", headers=HEADERS)
         assert r.status_code == 200
-        # quoted_rate should not appear directly in load list responses
-        # (it lives in the Quote entity, not Load)
         items = r.json()["items"]
+        assert len(items) > 0
+        # Every load should have quoted_rate (may be null for loads without a linked quote)
         for item in items:
-            assert "quoted_rate" not in item
+            assert "quoted_rate" in item
+        # Loads that have a quote_id must have a non-null quoted_rate
+        loads_with_quote = [i for i in items if i.get("quote_id")]
+        for item in loads_with_quote:
+            assert item["quoted_rate"] is not None, f"Load {item['load_id']} has quote_id but null quoted_rate"

@@ -108,7 +108,8 @@ def evaluate_offer(
         }
 
     # ── ACCEPT: at/below loadboard, OR carrier accepted our previous counter ──
-    if carrier_offer <= loadboard or (prev_counter is not None and carrier_offer <= prev_counter):
+    # Use raw loadboard_rate for threshold (rounding is only for counter display values)
+    if carrier_offer <= load.loadboard_rate or (prev_counter is not None and carrier_offer <= prev_counter):
         final_price = _smart_round(carrier_offer)
         return {
             "decision": "accept",

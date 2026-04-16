@@ -258,20 +258,30 @@ function AccountingTab({ load }: { load: Load }) {
           <p className="text-xs text-[#555555] uppercase tracking-wider font-mono-data">Financial Summary</p>
         </div>
         <div className="divide-y divide-[#1a1a1a]">
+          {load.quoted_rate != null && (
+            <div className="flex items-center justify-between px-5 py-3 bg-white/[0.02]">
+              <span className="text-sm text-[#888888]">Shipper Rate <span className="text-[#555555] text-xs">(what shipper pays)</span></span>
+              <span className="text-sm font-mono-data font-bold text-white">
+                ${load.quoted_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+          )}
           <div className="flex items-center justify-between px-5 py-3">
             <span className="text-sm text-[#888888]">Loadboard Rate</span>
             <span className="text-sm font-mono-data text-white">
               ${load.total_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
             </span>
           </div>
-          {load.booked_rate != null && (
-            <div className="flex items-center justify-between px-5 py-3">
-              <span className="text-sm text-[#888888]">Booked Rate <span className="text-[#555555] text-xs">(carrier paid)</span></span>
+          <div className="flex items-center justify-between px-5 py-3">
+            <span className="text-sm text-[#888888]">Booked Rate <span className="text-[#555555] text-xs">(carrier paid)</span></span>
+            {load.booked_rate != null ? (
               <span className="text-sm font-mono-data text-amber-400">
                 ${load.booked_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </span>
-            </div>
-          )}
+            ) : (
+              <span className="text-sm font-mono-data text-[#444444]">—</span>
+            )}
+          </div>
           {load.margin_pct != null && (
             <div className="flex items-center justify-between px-5 py-3">
               <span className="text-sm text-[#888888]">Broker Margin</span>
@@ -281,9 +291,17 @@ function AccountingTab({ load }: { load: Load }) {
             </div>
           )}
           <div className="flex items-center justify-between px-5 py-3">
-            <span className="text-sm text-[#888888]">Per Mile</span>
+            <span className="text-sm text-[#888888]">
+              Per Mile
+              {load.booked_rate != null && (
+                <span className="text-[#555555] text-xs ml-1">(carrier paid)</span>
+              )}
+            </span>
             <span className="text-sm font-mono-data text-[#aaaaaa]">
-              ${load.per_mile_rate.toFixed(2)}/mi
+              ${(load.booked_rate != null
+                ? load.booked_rate / load.miles
+                : load.per_mile_rate
+              ).toFixed(2)}/mi
             </span>
           </div>
         </div>

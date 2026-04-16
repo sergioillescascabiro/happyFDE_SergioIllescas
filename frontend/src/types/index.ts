@@ -31,6 +31,7 @@ export interface Load {
   status: LoadStatus;
   total_rate: number;
   per_mile_rate: number;
+  quoted_rate?: number | null;
   booked_rate?: number | null;
   margin_pct?: number | null;
   is_ai_booked?: boolean;

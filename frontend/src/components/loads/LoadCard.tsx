@@ -63,6 +63,24 @@ export function LoadCard({ load, isSelected, onClick }: LoadCardProps) {
           </>
         )}
       </div>
+      <div className="flex items-center justify-between mt-2.5">
+        {load.quoted_rate != null ? (
+          <span className="text-[11px] font-bold font-mono-data text-white">
+            ${load.quoted_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            <span className="text-[9px] text-slate-500 font-normal ml-1">shipper</span>
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-700 font-mono-data uppercase tracking-wider">—</span>
+        )}
+        {load.booked_rate != null ? (
+          <span className="text-[11px] font-bold font-mono-data text-amber-400">
+            ${load.booked_rate.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            <span className="text-[9px] text-slate-500 font-normal ml-1">carrier</span>
+          </span>
+        ) : (
+          <span className="text-[10px] text-slate-600 font-mono-data uppercase tracking-wider">pending</span>
+        )}
+      </div>
     </button>
   );
 }

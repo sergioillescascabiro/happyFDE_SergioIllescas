@@ -92,6 +92,7 @@ class LoadResponse(BaseModel):
     total_rate: float = 0.0
     per_mile_rate: float = 0.0
     # Financial tracking fields (broker-visible)
+    quoted_rate: Optional[float] = None  # what shipper pays broker
     booked_rate: Optional[float] = None
     margin_pct: Optional[float] = None
     is_ai_booked: bool = False
@@ -129,6 +130,7 @@ class LoadResponse(BaseModel):
             "updated_at": load.updated_at,
             "total_rate": round(load.loadboard_rate, 2),
             "per_mile_rate": round(load.loadboard_rate / load.miles, 4) if load.miles > 0 else 0.0,
+            "quoted_rate": load.quote.quoted_rate if load.quote else None,
             "booked_rate": load.booked_rate,
             "margin_pct": load.margin_pct,
             "is_ai_booked": load.is_ai_booked,

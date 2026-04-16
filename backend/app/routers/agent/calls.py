@@ -42,6 +42,7 @@ class CallClassifyRequest(BaseModel):
     sentiment: Optional[str] = None
     transcript_summary: Optional[str] = None
     extracted_data: Optional[dict] = None
+    negotiated_rate: Optional[float] = None  # Final agreed rate reported by agent
 
     @field_validator("outcome")
     @classmethod
@@ -268,9 +269,17 @@ def classify_call(
                 .order_by(Negotiation.round_number.desc())
                 .first()
             )
-            if last_accepted:
-                # Use final_price (smart-rounded) if available, else fall back to carrier_offer
-                load.booked_rate = last_accepted.final_price or last_accepted.carrier_offer
+            db_price = (
+                (last_accepted.final_price or last_accepted.carrier_offer)
+                if last_accepted else None
+            )
+            agent_price = payload.negotiated_rate
+            if db_price and agent_price:
+                load.booked_rate = max(db_price, agent_price)
+            elif db_price:
+                load.booked_rate = db_price
+            elif agent_price:
+                load.booked_rate = agent_price
             else:
                 load.booked_rate = load.loadboard_rate
 
