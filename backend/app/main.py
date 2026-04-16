@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+from app.config import settings
 from app.middleware.auth import require_dashboard_token
 from app.routers import loads as loads_router
 from app.routers import carriers as carriers_router
@@ -13,15 +15,42 @@ from app.routers.agent import negotiations as agent_negotiations_router
 from app.routers.agent import calls as agent_calls_router
 from app.routers import webhooks as webhooks_router
 
-app = FastAPI(title="HappyFDE API", version="0.1.0")
+# Setup logging for production observability
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="HappyFDE API",
+    description="Integrated Freight Brokerage Operations Engine",
+    version="1.1.0"
 )
+
+# CORS Configuration
+# In production, we allow the frontend URL and HappyRobot origins
+origins = [
+    "http://localhost:3000",
+    "https://happyrobot.ai",
+    "https://app.happyrobot.ai",
+]
+
+# Add wildcards for cloud run domains or specific production URL if known
+# For the challenge, we allow broad access if in production to ensure connectivity from platform
+if settings.APP_ENV == "production":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 app.include_router(loads_router.router)
 app.include_router(carriers_router.router)

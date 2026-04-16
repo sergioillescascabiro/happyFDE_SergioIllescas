@@ -644,7 +644,7 @@ export default function LoadsPage() {
   const [selectedLoad, setSelectedLoad] = useState<Load | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>('available');
   const [toast, setToast] = useState('');
   const [showUploadModal, setShowUploadModal] = useState(false);
 

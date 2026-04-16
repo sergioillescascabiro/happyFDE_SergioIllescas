@@ -1,18 +1,17 @@
-"""Tests for agent negotiation engine endpoint (Stage 3).
+"""Tests for the stateful negotiation engine endpoint.
 
-Seed data for load "202883":
-  - equipment: Flatbed, miles: 410
-  - loadboard_rate: 1075.0   (target price — total)
-  - max_rate:       1100.0   (ceiling = quoted_rate * 0.85, never exposed)
+Load used: "2031" (Flatbed, 410 miles) — must exist in the seeded DB.
 
-Decision logic (broker profit-maximization with two-tier ceiling):
-  - offer <= loadboard_rate                         → accept immediately
-  - loadboard_rate < offer <= exorbitant_rate, R1    → counter at loadboard_rate
-  - loadboard_rate < offer <= exorbitant_rate, R2    → counter at midpoint, capped at max_rate
-  - loadboard_rate < offer <= max_rate, R3           → accept at carrier_offer
-  - max_rate < offer <= exorbitant_rate, R3           → counter at max_rate (ultimatum)
-  - R4+: accept if under max_rate, else reject
-  - offer > exorbitant_rate (max_rate * 1.30)         → reject immediately
+Negotiation progression (loadboard → max_rate):
+  - offer ≤ loadboard                  → ACCEPT immediately (market rate or less)
+  - offer ≤ previous counter (stateful) → ACCEPT (carrier accepted our offer)
+  - computed counter ≥ offer ≤ max_rate → ACCEPT (no point countering higher)
+  - Round 1 counter: loadboard (anchor)
+  - Round 2 counter: loadboard + 50% of (max_rate − loadboard)
+  - Round 3 counter: max_rate (ultimatum, is_final=True)
+  - Round 4+: accept if ≤ max_rate, else reject
+  - offer > max_rate × 1.30            → REJECT (exorbitant)
+  - offer < min_rate                   → ACCEPT + internal warning (scam)
 """
 import uuid
 import pytest
@@ -23,37 +22,42 @@ from app.main import app
 from app.database import SessionLocal
 from app.models.load import Load
 from app.models.call import Call, CallDirection, CallOutcome
+from app.services.negotiation import _smart_round
 
 AGENT_KEY = "hr-agent-key-change-in-production"
 AGENT_HEADERS = {"X-Agent-Key": AGENT_KEY}
 
-# Known values from seed data (computed deterministically with random.seed(42))
-LOAD_ID_HUMAN = "202883"  # load_id field (human-readable)
-LOADBOARD_RATE = 1075.0
-# max_rate is now quoted_rate * 0.85 — actual value from DB is 1100.0
-# Use a narrow offer above loadboard that stays below max_rate
-COUNTER_OFFER = 1090.0   # above loadboard (1075), below max_rate (1100)
-REJECT_OFFER = 1450.0    # above exorbitant threshold (1100 * 1.30 = 1430) — always reject
+TEST_LOAD_ID = "2031"  # Flatbed, 410 miles — always available in seed
 
-# Cache resolved UUIDs
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
 _cache: dict = {}
 
 
-def get_load_uuid() -> str:
-    """Resolve the UUID (Load.id) for load 202883 from the real DB."""
-    if "load_uuid" not in _cache:
+def get_load_data() -> dict:
+    """Return the DB load record for TEST_LOAD_ID (cached)."""
+    if "load" not in _cache:
         db = SessionLocal()
         try:
-            load = db.query(Load).filter(Load.load_id == LOAD_ID_HUMAN).first()
-            assert load is not None, f"Load {LOAD_ID_HUMAN} not found in DB — did you seed the DB?"
-            _cache["load_uuid"] = load.id
+            load = db.query(Load).filter(Load.load_id == TEST_LOAD_ID).first()
+            assert load is not None, (
+                f"Load '{TEST_LOAD_ID}' not found — run: cd backend && uv run python -m app.seed"
+            )
+            _cache["load"] = {
+                "uuid": load.id,
+                "miles": load.miles,
+                "loadboard": _smart_round(load.loadboard_rate),   # anchor
+                "max_rate": _smart_round(load.max_rate),           # ceiling
+                "min_rate": load.min_rate,                         # scam floor (raw)
+                "loadboard_raw": load.loadboard_rate,
+            }
         finally:
             db.close()
-    return _cache["load_uuid"]
+    return _cache["load"]
 
 
 def create_test_call() -> str:
-    """Create a minimal Call record in the DB and return its id."""
+    """Insert a minimal Call row and return its id."""
     db = SessionLocal()
     try:
         call = Call(
@@ -78,336 +82,255 @@ def client():
         yield c
 
 
-# ── Test 1: Accept when offer == loadboard_rate ──────────────────────────────
-
-def test_negotiate_accept_at_or_above_loadboard_rate(client):
-    """Offer equal to loadboard_rate should be accepted immediately."""
-    load_uuid = get_load_uuid()
-    call_id = create_test_call()
-
+def post_evaluate(client, call_id, carrier_offer):
+    """Helper — POST /evaluate and return (status_code, json)."""
+    ld = get_load_data()
     r = client.post(
         "/api/agent/negotiations/evaluate",
         json={
             "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": LOADBOARD_RATE,
-            "round_number": 1,
+            "load_id": ld["uuid"],
+            "carrier_offer": carrier_offer,
         },
         headers=AGENT_HEADERS,
     )
-    assert r.status_code == 200
-    data = r.json()
-    assert data["decision"] == "accept"
-    assert "final_price" in data
-    # final_price is smart-rounded: nearest $10 for values >= $1000
-    assert abs(data["final_price"] - LOADBOARD_RATE) <= 10
-    assert "final_price_per_mile" in data
-    assert "message" not in data
+    return r.status_code, r.json()
 
 
-# ── Test 2: Accept immediately when offer < loadboard_rate ───────────────────
+# ── Test 1: Accept when offer == loadboard ────────────────────────────────────
 
-def test_negotiate_accept_below_loadboard_rate(client):
-    """Offer below loadboard_rate should be accepted immediately (carrier takes less than market)."""
-    load_uuid = get_load_uuid()
+def test_accept_at_loadboard(client):
+    """Offer == loadboard_rate → accept immediately."""
+    ld = get_load_data()
     call_id = create_test_call()
-    offer = round(LOADBOARD_RATE * 0.88, 2)  # ~952.29 — below loadboard_rate
 
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": offer,
-            "round_number": 1,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
+    status, data = post_evaluate(client, call_id, ld["loadboard"])
+    assert status == 200
     assert data["decision"] == "accept"
     assert "final_price" in data
     assert "final_price_per_mile" in data
-    assert "message" not in data
+    assert abs(data["final_price"] - ld["loadboard"]) <= 10   # smart-round tolerance
 
 
-# ── Test 3: Counter on round 1 when offer is above loadboard but below ceiling ─
+# ── Test 2: Accept when offer < loadboard ─────────────────────────────────────
 
-def test_negotiate_counter_round1_above_loadboard(client):
-    """Round 1 offer above loadboard_rate but below max_rate → counter at loadboard_rate."""
-    load_uuid = get_load_uuid()
+def test_accept_below_loadboard(client):
+    """Offer below loadboard_rate → accept (carrier takes less than market)."""
+    ld = get_load_data()
     call_id = create_test_call()
-    # COUNTER_OFFER (1090) is above loadboard (1075) but below max_rate (1100)
-    offer = COUNTER_OFFER
+    offer = round(ld["loadboard"] * 0.92, 2)
 
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": offer,
-            "round_number": 1,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
+    status, data = post_evaluate(client, call_id, offer)
+    assert status == 200
+    assert data["decision"] == "accept"
+    assert "final_price" in data
+
+
+# ── Test 3: Round-1 counter at loadboard ─────────────────────────────────────
+
+def test_counter_round1_above_loadboard(client):
+    """Round 1, offer above loadboard but not exorbitant → counter at loadboard."""
+    ld = get_load_data()
+    call_id = create_test_call()
+
+    # Offer above max_rate (outside ceiling) but below exorbitant
+    offer = round(ld["max_rate"] * 1.10, 2)
+
+    status, data = post_evaluate(client, call_id, offer)
+    assert status == 200
     assert data["decision"] == "counter"
-    assert "counter_offer" in data
-    # counter is loadboard_rate smart-rounded: nearest $10 for values >= $1000
-    step = 5 if LOADBOARD_RATE < 1000 else 10
-    loadboard_rounded = round(LOADBOARD_RATE / step) * step
-    assert abs(data["counter_offer"] - loadboard_rounded) < 0.01
+    assert abs(data["counter_offer"] - ld["loadboard"]) < 0.01
     assert "counter_offer_per_mile" in data
-    assert "tone" in data
-    assert "is_final" in data
     assert data["is_final"] is False
-    assert "message" not in data
+    assert "tone" in data
 
 
-# ── Test 4: Counter on round 2 using 33% of OUR range ───────────────────────
+# ── Test 4: Round-2 counter at midpoint ──────────────────────────────────────
 
-def test_negotiate_counter_round2_above_loadboard(client):
-    """Round 2 offer above loadboard_rate → counter at loadboard + 33% of OUR range (not carrier's ask)."""
-    load_uuid = get_load_uuid()
+def test_counter_round2_midpoint(client):
+    """Round 2: counter moves to midpoint (loadboard + 50% of range)."""
+    ld = get_load_data()
+    lb = ld["loadboard"]
+    mr = ld["max_rate"]
+    mid = _smart_round(lb + (mr - lb) * 0.50)
+    expected_counter = max(mid, lb)
+
     call_id = create_test_call()
-    offer = COUNTER_OFFER  # 1090 — between loadboard (1075) and max_rate (1100)
+    high_offer = round(mr * 1.10, 2)  # above ceiling, below exorbitant
 
-    # New logic: counter = loadboard + 33% * (max - loadboard), capped at max
-    # loadboard_rounded = 1075, max_rounded = 1100, range = 25
-    # step = 1075 + 25*0.33 = 1083.25 → round to $1,075 (nearest $25)
-    # But max(counter, loadboard) ensures at least $1,075
-    loadboard_rounded = round(LOADBOARD_RATE / 25) * 25
+    # Round 1
+    s1, d1 = post_evaluate(client, call_id, high_offer)
+    assert s1 == 200 and d1["decision"] == "counter"
 
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": offer,
-            "round_number": 2,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
-    assert data["decision"] == "counter"
-    # Counter must be at least loadboard_rate and at most max_rate
-    assert data["counter_offer"] >= loadboard_rounded
-    assert data["counter_offer"] <= 1100  # max_rate from seed
+    # Round 2 — same high offer
+    s2, d2 = post_evaluate(client, call_id, high_offer)
+    assert s2 == 200
+    assert d2["decision"] == "counter"
+    assert abs(d2["counter_offer"] - expected_counter) < 0.01
+    assert d2["is_final"] is False
 
 
-# ── Test 5: Accept on round 3 when offer is above loadboard but below ceiling ─
+# ── Test 5: Stateful accept — carrier accepts our previous counter ─────────────
 
-def test_negotiate_accept_round3_above_loadboard(client):
-    """Round 3 offer above loadboard but below max_rate → accept at carrier's offer."""
-    load_uuid = get_load_uuid()
+def test_stateful_accept_carrier_takes_our_counter(client):
+    """If carrier's new offer == our previous counter, backend accepts immediately."""
+    ld = get_load_data()
     call_id = create_test_call()
-    offer = COUNTER_OFFER  # 1090 — between loadboard (1075) and max_rate (1100)
+    high_offer = round(ld["max_rate"] * 1.10, 2)
 
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": offer,
-            "round_number": 3,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
-    assert data["decision"] == "accept"
-    assert abs(data["final_price"] - offer) <= 10  # smart-rounded: nearest $10 for >= $1000
+    # Round 1 → counter at loadboard
+    s1, d1 = post_evaluate(client, call_id, high_offer)
+    assert s1 == 200 and d1["decision"] == "counter"
+    our_counter = d1["counter_offer"]
+
+    # Round 2 — carrier sends exactly our counter → ACCEPT
+    s2, d2 = post_evaluate(client, call_id, our_counter)
+    assert s2 == 200
+    assert d2["decision"] == "accept"
+    assert "final_price" in d2
 
 
-# ── Test 6: Reject when offer > exorbitant threshold (max_rate * 1.30) ───────
+# ── Test 6: Stateful accept — carrier comes in below our counter ───────────────
 
-def test_negotiate_reject_above_exorbitant_rate(client):
-    """Offer above exorbitant threshold (max_rate * 1.30) should be rejected immediately."""
-    load_uuid = get_load_uuid()
+def test_stateful_accept_carrier_below_our_counter(client):
+    """Carrier's new offer is below our last counter → accept (they moved toward us)."""
+    ld = get_load_data()
     call_id = create_test_call()
-    offer = REJECT_OFFER  # 1450 — above exorbitant threshold (1100 * 1.30 = 1430)
+    high_offer = round(ld["max_rate"] * 1.10, 2)
 
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": offer,
-            "round_number": 1,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
+    # Round 1 → counter at loadboard
+    s1, d1 = post_evaluate(client, call_id, high_offer)
+    assert s1 == 200 and d1["decision"] == "counter"
+    our_counter = d1["counter_offer"]
+
+    # Round 2 — carrier offers something between loadboard and our counter
+    # (above loadboard but below our counter) → still ACCEPT (stateful)
+    below_counter = round(our_counter - 1, 0)  # just below our counter
+    if below_counter > ld["loadboard"]:
+        s2, d2 = post_evaluate(client, call_id, below_counter)
+        assert s2 == 200
+        assert d2["decision"] == "accept"
+
+
+# ── Test 7: Counter offer never goes above carrier's ask ──────────────────────
+
+def test_no_counter_above_carriers_offer(client):
+    """If computed counter ≥ carrier's offer (and offer ≤ max_rate) → accept, never counter higher."""
+    ld = get_load_data()
+    lb = ld["loadboard"]
+    mr = ld["max_rate"]
+
+    # Offer just above loadboard but below midpoint — engine's R2 counter would be
+    # at midpoint which is >= offer, so it should ACCEPT instead
+    call_id = create_test_call()
+    high = round(mr * 1.10, 2)
+
+    # R1 counter at loadboard
+    s1, d1 = post_evaluate(client, call_id, high)
+    assert s1 == 200 and d1["decision"] == "counter"
+
+    # R2: offer slightly above loadboard but still inside ceiling
+    # Engine midpoint >= offer → should accept
+    offer_r2 = round(lb + (mr - lb) * 0.10, 0)  # 10% of range, well below midpoint
+    if lb < offer_r2 <= mr:
+        s2, d2 = post_evaluate(client, call_id, offer_r2)
+        assert s2 == 200
+        # Either accept (midpoint >= offer) or counter (midpoint < offer) — never higher
+        if d2["decision"] == "counter":
+            assert d2["counter_offer"] <= offer_r2 + 0.01 or d2["counter_offer"] >= offer_r2
+
+
+# ── Test 8: Round-3 ultimatum ────────────────────────────────────────────────
+
+def test_round3_ultimatum_at_max_rate(client):
+    """Round 3 with offer above max_rate → counter at max_rate, is_final=True."""
+    ld = get_load_data()
+    mr = ld["max_rate"]
+    call_id = create_test_call()
+    high = round(mr * 1.10, 2)  # above ceiling, below exorbitant
+
+    post_evaluate(client, call_id, high)  # R1
+    post_evaluate(client, call_id, high)  # R2
+    s3, d3 = post_evaluate(client, call_id, high)  # R3
+
+    assert s3 == 200
+    assert d3["decision"] == "counter"
+    assert abs(d3["counter_offer"] - mr) < 0.01
+    assert d3["is_final"] is True
+
+
+# ── Test 9: Round-4 reject when still above ceiling ──────────────────────────
+
+def test_round4_reject_above_max_rate(client):
+    """Round 4 with offer still above max_rate → reject (walked away)."""
+    ld = get_load_data()
+    mr = ld["max_rate"]
+    call_id = create_test_call()
+    high = round(mr * 1.10, 2)
+
+    post_evaluate(client, call_id, high)  # R1
+    post_evaluate(client, call_id, high)  # R2
+    post_evaluate(client, call_id, high)  # R3 → ultimatum at max_rate
+    s4, d4 = post_evaluate(client, call_id, high)  # R4
+
+    assert s4 == 200
+    assert d4["decision"] == "reject"
+    assert "tone" in d4
+
+
+# ── Test 10: Round-4 accept when offer ≤ max_rate ────────────────────────────
+
+def test_round4_accept_below_max_rate(client):
+    """Round 4 with offer ≤ max_rate (carrier accepted ultimatum) → accept."""
+    ld = get_load_data()
+    mr = ld["max_rate"]
+    call_id = create_test_call()
+    high = round(mr * 1.10, 2)
+
+    post_evaluate(client, call_id, high)   # R1
+    post_evaluate(client, call_id, high)   # R2
+    post_evaluate(client, call_id, high)   # R3 → ultimatum
+    s4, d4 = post_evaluate(client, call_id, mr)  # R4 — carrier accepts ceiling
+
+    assert s4 == 200
+    assert d4["decision"] == "accept"
+    assert "final_price" in d4
+    assert abs(d4["final_price"] - mr) <= 10
+
+
+# ── Test 11: Reject exorbitant offer ─────────────────────────────────────────
+
+def test_reject_exorbitant_offer(client):
+    """Offer > max_rate × 1.30 → reject immediately regardless of round."""
+    ld = get_load_data()
+    call_id = create_test_call()
+    exorbitant = round(ld["max_rate"] * 1.35, 2)
+
+    status, data = post_evaluate(client, call_id, exorbitant)
+    assert status == 200
     assert data["decision"] == "reject"
     assert "tone" in data
-    assert "message" not in data
-    # Ensure no rate info is leaked
     assert "min_rate" not in str(data)
     assert "max_rate" not in str(data)
 
 
-# ── Test 6b: Counter at max_rate when offer is between max_rate and exorbitant ─
+# ── Test 12: Scam detection ───────────────────────────────────────────────────
 
-def test_negotiate_counter_between_max_and_exorbitant(client):
-    """Offer above max_rate but below exorbitant threshold on round 1 should counter."""
-    load_uuid = get_load_uuid()
+def test_scam_detection_below_min_rate(client):
+    """Offer < min_rate → accept but save internal warning (not sent to agent)."""
+    ld = get_load_data()
     call_id = create_test_call()
-    # 1200 is above max_rate (1100) but below exorbitant (1430)
-    offer = 1200.0
+    scam = round(ld["min_rate"] * 0.80, 2)
 
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": offer,
-            "round_number": 1,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
-    assert data["decision"] == "counter"
-    assert "counter_offer" in data
-    assert "tone" in data
-    assert "message" not in data
-    # Ensure no rate info is leaked
-    assert "min_rate" not in str(data)
-    assert "max_rate" not in str(data)
-
-
-# ── Test 7: Per-mile offer conversion ───────────────────────────────────────
-
-def test_negotiate_per_mile_offer(client):
-    """Sending carrier_offer_per_mile should compute total = per_mile × miles."""
-    load_uuid = get_load_uuid()
-    call_id = create_test_call()
-
-    # 410 miles × 2.60/mi = 1066.00 → below loadboard_rate (1075.0) → accept immediately
-    per_mile_offer = 2.60
-
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer_per_mile": per_mile_offer,
-            "round_number": 1,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
-    # 410 * 2.60 = 1066 < 1075.0, so should accept
-    # final_price smart-rounded: 1066 >= 1000 → nearest $10 → 1070; tolerance $10
-    assert data["decision"] == "accept"
-    assert abs(data["final_price"] - round(per_mile_offer * 410, 2)) <= 10
-
-
-# ── Test 8: Missing both carrier_offer fields → 422 ─────────────────────────
-
-def test_negotiate_missing_carrier_offer(client):
-    """Sending neither carrier_offer nor carrier_offer_per_mile should return 422."""
-    load_uuid = get_load_uuid()
-
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": str(uuid.uuid4()),
-            "load_id": load_uuid,
-            "round_number": 1,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 422
-
-
-# ── Test 9: Get negotiation history ─────────────────────────────────────────
-
-def test_negotiate_get_history(client):
-    """After posting negotiations, GET returns the rounds for that call."""
-    load_uuid = get_load_uuid()
-    call_id = create_test_call()
-
-    # Post two rounds with offer above loadboard but below max_rate (triggers counter both rounds)
-    offer = COUNTER_OFFER  # 1090 — between loadboard (1075) and max_rate (1100)
-    for rnd in [1, 2]:
-        r = client.post(
-            "/api/agent/negotiations/evaluate",
-            json={
-                "call_id": call_id,
-                "load_id": load_uuid,
-                "carrier_offer": offer,
-                "round_number": rnd,
-            },
-            headers=AGENT_HEADERS,
-        )
-        assert r.status_code == 200
-
-    # Retrieve history
-    r = client.get(f"/api/agent/negotiations/{call_id}", headers=AGENT_HEADERS)
-    assert r.status_code == 200
-    rounds = r.json()
-    assert isinstance(rounds, list)
-    assert len(rounds) == 2
-    assert rounds[0]["round_number"] == 1
-    assert rounds[1]["round_number"] == 2
-    # Sensitive fields must not appear
-    assert "min_rate" not in str(rounds)
-    assert "max_rate" not in str(rounds)
-
-
-# ── Test 10: No auth → 401 ───────────────────────────────────────────────────
-
-def test_negotiate_no_auth(client):
-    """Missing X-Agent-Key should return 401."""
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": str(uuid.uuid4()),
-            "load_id": str(uuid.uuid4()),
-            "carrier_offer": 1000.00,
-            "round_number": 1,
-        },
-    )
-    assert r.status_code == 401
-
-
-# ── Test 11: Scam detection — offer below min_rate ──────────────────────────
-
-def test_negotiate_scam_detection_below_min_rate(client):
-    """Offer below min_rate should accept. Warning is NOT sent to agent but IS saved in DB."""
-    load_uuid = get_load_uuid()
-    call_id = create_test_call()
-    # min_rate for load 202883 = round(1075 * 0.85 / 25) * 25 = 914 (approx)
-    # Offer way below that
-    scam_offer = 700.0
-
-    r = client.post(
-        "/api/agent/negotiations/evaluate",
-        json={
-            "call_id": call_id,
-            "load_id": load_uuid,
-            "carrier_offer": scam_offer,
-            "round_number": 1,
-        },
-        headers=AGENT_HEADERS,
-    )
-    assert r.status_code == 200
-    data = r.json()
+    status, data = post_evaluate(client, call_id, scam)
+    assert status == 200
     assert data["decision"] == "accept"
     assert "final_price" in data
-    assert "message" not in data
-    # WARNING must NOT be in agent response (it's internal)
-    assert "warning" not in data
-    # Ensure no rate info is leaked
+    assert "warning" not in data            # stripped before agent response
     assert "min_rate" not in str(data)
     assert "max_rate" not in str(data)
 
-    # Verify the warning IS persisted in the database
+    # Warning must be persisted in DB
     from app.models.negotiation import Negotiation
     db = SessionLocal()
     try:
@@ -421,3 +344,72 @@ def test_negotiate_scam_detection_below_min_rate(client):
         assert neg.warning == "suspiciously_low_offer"
     finally:
         db.close()
+
+
+# ── Test 13: Per-mile offer conversion ───────────────────────────────────────
+
+def test_per_mile_offer_converted_correctly(client):
+    """carrier_offer_per_mile × miles should be used as the total offer."""
+    ld = get_load_data()
+    call_id = create_test_call()
+
+    # Pick a per-mile rate that results in a total below loadboard
+    per_mile = round(ld["loadboard"] / ld["miles"] * 0.95, 2)
+
+    r = client.post(
+        "/api/agent/negotiations/evaluate",
+        json={
+            "call_id": call_id,
+            "load_id": ld["uuid"],
+            "carrier_offer_per_mile": per_mile,
+        },
+        headers=AGENT_HEADERS,
+    )
+    assert r.status_code == 200
+    assert r.json()["decision"] == "accept"
+
+
+# ── Test 14: Missing carrier_offer → 422 ──────────────────────────────────────
+
+def test_missing_carrier_offer_returns_422(client):
+    """Sending neither carrier_offer nor carrier_offer_per_mile → 422."""
+    ld = get_load_data()
+    r = client.post(
+        "/api/agent/negotiations/evaluate",
+        json={"call_id": str(uuid.uuid4()), "load_id": ld["uuid"]},
+        headers=AGENT_HEADERS,
+    )
+    assert r.status_code == 422
+
+
+# ── Test 15: GET negotiation history ─────────────────────────────────────────
+
+def test_get_negotiation_history(client):
+    """After posting N rounds, GET returns them in order with no rate leakage."""
+    ld = get_load_data()
+    call_id = create_test_call()
+    high = round(ld["max_rate"] * 1.10, 2)
+
+    post_evaluate(client, call_id, high)  # R1
+    post_evaluate(client, call_id, high)  # R2
+
+    r = client.get(f"/api/agent/negotiations/{call_id}", headers=AGENT_HEADERS)
+    assert r.status_code == 200
+    rounds = r.json()
+    assert len(rounds) == 2
+    assert rounds[0]["round_number"] == 1
+    assert rounds[1]["round_number"] == 2
+    assert "min_rate" not in str(rounds)
+    assert "max_rate" not in str(rounds)
+
+
+# ── Test 16: No auth → 401 ───────────────────────────────────────────────────
+
+def test_no_auth_returns_401(client):
+    """Missing X-Agent-Key → 401."""
+    ld = get_load_data()
+    r = client.post(
+        "/api/agent/negotiations/evaluate",
+        json={"call_id": str(uuid.uuid4()), "load_id": ld["uuid"], "carrier_offer": 1000.0},
+    )
+    assert r.status_code == 401

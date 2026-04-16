@@ -165,7 +165,8 @@ def update_call(
         call.carrier_id = carrier.id
 
     if payload.load_id is not None:
-        call.load_id = payload.load_id
+        # Convert empty string to None to avoid ForeignKeyViolation in DB
+        call.load_id = payload.load_id if payload.load_id.strip() != "" else None
 
     if payload.outcome is not None:
         try:

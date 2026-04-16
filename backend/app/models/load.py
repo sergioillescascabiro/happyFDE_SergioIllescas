@@ -5,6 +5,10 @@ from sqlalchemy import String, Float, Boolean, DateTime, Text, Integer, Enum as 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 import enum
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from app.models.shipper import Shipper
+    from app.models.quote import Quote
 
 class LoadStatus(str, enum.Enum):
     available = "available"
@@ -19,13 +23,13 @@ class Load(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     load_id: Mapped[str] = mapped_column(String, unique=True)
     shipper_id: Mapped[str] = mapped_column(String, ForeignKey("shippers.id"))
-    origin: Mapped[str] = mapped_column(String)
-    destination: Mapped[str] = mapped_column(String)
+    origin: Mapped[str] = mapped_column(String, index=True)
+    destination: Mapped[str] = mapped_column(String, index=True)
     origin_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     origin_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     destination_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     destination_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
-    pickup_datetime: Mapped[datetime] = mapped_column(DateTime)
+    pickup_datetime: Mapped[datetime] = mapped_column(DateTime, index=True)
     delivery_datetime: Mapped[datetime] = mapped_column(DateTime)
     equipment_type: Mapped[str] = mapped_column(String)
     loadboard_rate: Mapped[float] = mapped_column(Float)
@@ -37,8 +41,8 @@ class Load(Base):
     num_of_pieces: Mapped[int] = mapped_column(Integer, default=1)
     miles: Mapped[float] = mapped_column(Float)
     dimensions: Mapped[str | None] = mapped_column(String, nullable=True)
-    reference_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    status: Mapped[LoadStatus] = mapped_column(SAEnum(LoadStatus), default=LoadStatus.available)
+    reference_id: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
+    status: Mapped[LoadStatus] = mapped_column(SAEnum(LoadStatus), default=LoadStatus.available, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 

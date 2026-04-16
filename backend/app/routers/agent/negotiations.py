@@ -21,7 +21,9 @@ class NegotiationEvaluateRequest(BaseModel):
     load_id: str
     carrier_offer: Optional[float] = None
     carrier_offer_per_mile: Optional[float] = None
-    round_number: int = 1
+    # round_number is no longer used by the engine (derived from DB),
+    # but accepted for backward-compatibility with existing workflow versions.
+    round_number: Optional[int] = None
 
     @model_validator(mode="after")
     def check_at_least_one_offer(self):
@@ -57,7 +59,12 @@ def evaluate_negotiation(
     db: Session = Depends(get_db),
     _: str = Depends(require_agent_key),
 ):
-    """Evaluate a carrier's price offer. Persists the round to the DB."""
+    """Evaluate a carrier's price offer.
+
+    The engine is stateful — it reads previous rounds from the DB using
+    call_id, so the agent does NOT need to track or send round_number.
+    Just forward every carrier response (counter or acceptance) here.
+    """
     # Resolve load
     load = db.query(Load).filter(Load.id == payload.load_id).first()
     if not load:
@@ -69,27 +76,25 @@ def evaluate_negotiation(
     else:
         total_offer = payload.carrier_offer_per_mile * load.miles
 
-    # Run negotiation engine
+    # Run negotiation engine (stateful)
     try:
-        result = evaluate_offer(payload.load_id, total_offer, payload.round_number, db)
+        result = evaluate_offer(
+            call_id=payload.call_id,
+            load_id=payload.load_id,
+            carrier_offer=total_offer,
+            db=db,
+        )
     except ValueError as e:
         raise HTTPException(404, str(e))
 
+    # Extract internal fields before persisting / responding
     decision = result["decision"]
+    round_number = result.pop("_round_number")
+    warning = result.pop("warning", None)
 
     # Persist negotiation round
-    carrier_offer_per_mile = (
-        round(total_offer / load.miles, 4) if load.miles > 0 else 0.0
-    )
+    carrier_offer_per_mile = round(total_offer / load.miles, 4) if load.miles > 0 else 0.0
 
-    counter_offer = result.get("counter_offer")
-    counter_offer_per_mile = result.get("counter_offer_per_mile")
-    final_price = result.get("final_price")
-    tone = result.get("tone")
-    is_final = result.get("is_final", False)
-    warning = result.get("warning")
-
-    # Map decision to NegotiationResponse enum value
     response_enum = {
         "accept": NegResponseEnum.accept,
         "counter": NegResponseEnum.counter,
@@ -100,24 +105,22 @@ def evaluate_negotiation(
         id=str(uuid.uuid4()),
         call_id=payload.call_id,
         load_id=payload.load_id,
-        round_number=payload.round_number,
+        round_number=round_number,
         carrier_offer=round(total_offer, 2),
         carrier_offer_per_mile=carrier_offer_per_mile,
         system_response=response_enum,
-        counter_offer=counter_offer,
-        counter_offer_per_mile=counter_offer_per_mile,
-        final_price=final_price,
-        tone=tone,
-        is_final=is_final,
+        counter_offer=result.get("counter_offer"),
+        counter_offer_per_mile=result.get("counter_offer_per_mile"),
+        final_price=result.get("final_price"),
+        tone=result.get("tone"),
+        is_final=result.get("is_final", False),
         warning=warning,
         created_at=datetime.now(timezone.utc),
     )
     db.add(neg)
     db.commit()
 
-    # Strip internal fields before sending response to agent
-    agent_response = {k: v for k, v in result.items() if k != "warning"}
-    return agent_response
+    return result
 
 
 @router.get("/{call_id}", response_model=List[NegotiationRoundResponse])
@@ -126,7 +129,7 @@ def get_negotiation_history(
     db: Session = Depends(get_db),
     _: str = Depends(require_agent_key),
 ):
-    """Return all negotiation rounds for a given call."""
+    """Return all negotiation rounds for a given call, ordered by round."""
     rounds = (
         db.query(Negotiation)
         .filter(Negotiation.call_id == call_id)

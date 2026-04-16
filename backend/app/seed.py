@@ -15,12 +15,17 @@ from app.models.carrier import CarrierStatus, CarrierSource
 from app.models.call import CallDirection, CallOutcome, CallSentiment
 from app.models.negotiation import NegotiationResponse
 from app.models.quote import QuoteStatus
+from app.config import settings
 from app.database import Base
 
-# Seed with fixed random for reproducibility
+# Seed with fixed random for reproducibility in dev
 random.seed(42)
 
-TODAY = datetime(2026, 4, 12, 12, 0, 0)
+# Use actual current date for production seeding, fixed date for dev reproducibility
+if settings.APP_ENV == "production":
+    TODAY = datetime.now()
+else:
+    TODAY = datetime(2026, 4, 12, 12, 0, 0)
 
 
 def clear_db(db):
@@ -197,45 +202,56 @@ def seed_loads(db, shippers):
     autozone = shippers["AutoZone Parts"]
     sysco = shippers["Sysco Foods"]
 
+    # Track which load_ids are AI-booked for attribution later
+    AI_LOAD_IDS = {"1201","1202","1203","1204","1205","1206","1207","1208","1209","1210"}
+
     loads_data = [
-        # Available loads (20)
-        ("202883", walmart,   "Lincolnshire, IL",        "Ashville, OH",           410,  "Flatbed",  "Coils",              44000, LoadStatus.available, 3),
-        ("202884", walmart,   "Sterling Heights, MI",    "Columbus, IN",           280,  "Dry Van",  "Auto Parts",         32000, LoadStatus.available, 5),
-        ("202885", homedepot, "Chicago, IL",             "Atlanta, GA",            780,  "Dry Van",  "Electronics",        38000, LoadStatus.available, 2),
-        ("202886", sysco,     "Los Angeles, CA",         "Dallas, TX",             1435, "Reefer",   "Fresh Produce",      42000, LoadStatus.available, 1),
-        ("202887", walmart,   "Newark, NJ",              "Miami, FL",              1280, "Dry Van",  "Furniture",          28000, LoadStatus.available, 4),
-        ("202888", homedepot, "Seattle, WA",             "Denver, CO",             1320, "Flatbed",  "Building Materials", 45000, LoadStatus.available, 6),
-        ("202889", sysco,     "Houston, TX",             "Memphis, TN",            580,  "Dry Van",  "Paper Products",     35000, LoadStatus.available, 3),
-        ("202890", sysco,     "Detroit, MI",             "Nashville, TN",          530,  "Reefer",   "Frozen Food",        40000, LoadStatus.available, 7),
-        ("202891", homedepot, "Phoenix, AZ",             "Portland, OR",           1420, "Flatbed",  "Machinery",          43000, LoadStatus.available, 8),
-        ("202892", walmart,   "Boston, MA",              "Charlotte, NC",          840,  "Dry Van",  "Textiles",           25000, LoadStatus.available, 2),
-        ("202893", autozone,  "Baytown, TX",             "Robert, LA",             304,  "Tanker",   "Chemicals",          48000, LoadStatus.available, 5),
-        ("202894", walmart,   "Magnolia, AR",            "Houston, TX",            318,  "Dry Van",  "Paper Products",     30000, LoadStatus.available, 9),
-        ("202895", homedepot, "Villa Rica, GA",          "Hutchins, TX",           751,  "Flatbed",  "Iron Fittings",      44000, LoadStatus.available, 4),
-        ("202896", sysco,     "Minneapolis, MN",         "Kansas City, MO",        440,  "Reefer",   "Pharmaceuticals",    15000, LoadStatus.available, 6),
-        ("202897", homedepot, "San Francisco, CA",       "Salt Lake City, UT",     735,  "Flatbed",  "Machinery",          41000, LoadStatus.available, 10),
-        ("202898", autozone,  "Memphis, TN",             "Nashville, TN",          210,  "Dry Van",  "Auto Parts",         22000, LoadStatus.available, 7),
-        ("202899", walmart,   "Columbus, OH",            "Pittsburgh, PA",         185,  "Dry Van",  "Consumer Goods",     29000, LoadStatus.available, 11),
-        ("202900", sysco,     "Dallas, TX",              "Oklahoma City, OK",      205,  "Reefer",   "Dairy Products",     38000, LoadStatus.available, 3),
-        ("202901", homedepot, "Charlotte, NC",           "Baltimore, MD",          410,  "Flatbed",  "Steel Beams",        46000, LoadStatus.available, 12),
-        ("202902", autozone,  "Portland, OR",            "Sacramento, CA",         580,  "Dry Van",  "Electronic Parts",   24000, LoadStatus.available, 8),
-        ("202915", homedepot, "Chicago, IL",             "St. Louis, MO",          300,  "Dry Van",  "Hardware",           31000, LoadStatus.available, 5),
-        # Covered loads (5)
-        ("202903", walmart,   "Louisville, KY",          "Indianapolis, IN",       115,  "Dry Van",  "Packaged Goods",     27000, LoadStatus.covered,   -2),
-        ("202904", sysco,     "New Orleans, LA",         "Birmingham, AL",         345,  "Reefer",   "Seafood",            20000, LoadStatus.covered,   -1),
-        ("202905", homedepot, "Albuquerque, NM",         "El Paso, TX",            265,  "Flatbed",  "Construction Equip", 48000, LoadStatus.covered,   -3),
-        ("202906", autozone,  "Cleveland, OH",           "Cincinnati, OH",         245,  "Dry Van",  "Auto Parts",         31000, LoadStatus.covered,   -1),
-        ("202907", walmart,   "Las Vegas, NV",           "Los Angeles, CA",        270,  "Dry Van",  "Consumer Goods",     26000, LoadStatus.covered,   -2),
-        # Pending loads (3)
-        ("202908", sysco,     "Tampa, FL",               "Jacksonville, FL",       200,  "Reefer",   "Fresh Produce",      36000, LoadStatus.pending,   1),
-        ("202909", homedepot, "Kansas City, MO",         "St. Louis, MO",          250,  "Dry Van",  "Home Improvement",   28000, LoadStatus.pending,   2),
-        ("202910", walmart,   "Denver, CO",              "Salt Lake City, UT",     370,  "Flatbed",  "Lumber",             43000, LoadStatus.pending,   1),
-        # Cancelled loads (2)
-        ("202911", autozone,  "Richmond, VA",            "Washington, DC",         110,  "Dry Van",  "Auto Parts",         19000, LoadStatus.cancelled, -5),
-        ("202912", sysco,     "Fresno, CA",              "San Diego, CA",          330,  "Reefer",   "Perishables",        41000, LoadStatus.cancelled, -3),
-        # Delivered loads (2) - pickup was in the past, delivery is in the past
-        ("202913", walmart,   "Chicago, IL",             "Columbus, OH",           310,  "Dry Van",  "Consumer Goods",     28000, LoadStatus.delivered, -10),
-        ("202914", sysco,     "Atlanta, GA",             "Nashville, TN",          250,  "Reefer",   "Frozen Food",        35000, LoadStatus.delivered, -8),
+        # --- THE DEMO LOAD: CHICAGO -> SAN FRANCISCO ---
+        # Notes mix: carrier-favorable (team drivers, detention risk, SF difficulty)
+        # and agent-favorable (liability, GPS mandatory, FSC included)
+        ("2025", walmart, "Chicago, IL", "San Francisco, CA", 2130, "Dry Van", "High Value Electronics", 35000, LoadStatus.available, 0, None,
+         "Team drivers required — 2 drivers mandatory for this run. | Pickup at Chicago warehouse — expect 2-3hr load time, detention applies after 2hrs. | High-value cargo, carrier assumes $100K liability. | GPS tracking mandatory — no exceptions. | San Francisco delivery — limited dock windows, strict 4hr appointment. | FSC included in posted rate, no additional surcharges.", "REF-2025"),
+
+        # --- AVAILABLE LOADS ---
+        ("2031", walmart,   "Lincolnshire, IL",     "Ashville, OH",          410,  "Flatbed",  "Coils",              44000, LoadStatus.available, 3,  None, None, "REF-2031"),
+        ("2032", walmart,   "Sterling Heights, MI", "Columbus, IN",          280,  "Dry Van",  "Auto Parts",         32000, LoadStatus.available, 5,  None, None, "REF-2032"),
+        ("2033", homedepot, "Chicago, IL",          "Atlanta, GA",           780,  "Dry Van",  "Electronics",        38000, LoadStatus.available, 2,  None, None, "REF-2033"),
+        ("2034", sysco,     "Los Angeles, CA",      "Dallas, TX",           1435,  "Reefer",   "Fresh Produce",      42000, LoadStatus.available, 1,  None, None, "REF-2034"),
+        ("2035", walmart,   "Newark, NJ",           "Miami, FL",            1280,  "Dry Van",  "Furniture",          28000, LoadStatus.available, 4,  None, None, "REF-2035"),
+        ("2036", homedepot, "Seattle, WA",          "Denver, CO",           1320,  "Flatbed",  "Building Materials", 45000, LoadStatus.available, 6,  None, None, "REF-2036"),
+        ("2037", sysco,     "Houston, TX",          "Memphis, TN",           580,  "Dry Van",  "Paper Products",     35000, LoadStatus.available, 3,  None, None, "REF-2037"),
+        ("2038", sysco,     "Detroit, MI",          "Nashville, TN",         530,  "Reefer",   "Frozen Food",        40000, LoadStatus.available, 7,  None, None, "REF-2038"),
+        ("2039", homedepot, "Phoenix, AZ",          "Portland, OR",         1420,  "Flatbed",  "Machinery",          43000, LoadStatus.available, 8,  None, None, "REF-2039"),
+        ("2040", walmart,   "Boston, MA",           "Charlotte, NC",         840,  "Dry Van",  "Textiles",           25000, LoadStatus.available, 2,  None, None, "REF-2040"),
+
+        # --- PAUL AI-BOOKED LOADS (last 7 days) ---
+        ("1201", walmart,   "Houston, TX",          "Nashville, TN",         580,  "Dry Van",  "Paper Products",     35000, LoadStatus.delivered,  -7, None, None, "REF-1201"),
+        ("1202", sysco,     "Detroit, MI",          "Atlanta, GA",           740,  "Reefer",   "Frozen Food",        40000, LoadStatus.delivered,  -6, None, None, "REF-1202"),
+        ("1203", walmart,   "Dallas, TX",           "Charlotte, NC",        1100,  "Dry Van",  "Consumer Goods",     29000, LoadStatus.delivered,  -5, None, None, "REF-1203"),
+        ("1204", sysco,     "Minneapolis, MN",      "Kansas City, MO",       440,  "Reefer",   "Pharmaceuticals",    15000, LoadStatus.covered,    -4, None, None, "REF-1204"),
+        ("1205", homedepot, "Boston, MA",           "Philadelphia, PA",      310,  "Dry Van",  "Electronics",        22000, LoadStatus.covered,    -3, None, None, "REF-1205"),
+        ("1206", homedepot, "Seattle, WA",          "Portland, OR",          180,  "Flatbed",  "Building Materials", 45000, LoadStatus.delivered,  -6, None, None, "REF-1206"),
+        ("1207", autozone,  "Memphis, TN",          "Nashville, TN",         210,  "Dry Van",  "Auto Parts",         22000, LoadStatus.delivered,  -5, None, None, "REF-1207"),
+        ("1208", homedepot, "Denver, CO",           "Salt Lake City, UT",    370,  "Flatbed",  "Lumber",             43000, LoadStatus.covered,    -2, None, None, "REF-1208"),
+        ("1209", walmart,   "Phoenix, AZ",          "Las Vegas, NV",         285,  "Dry Van",  "Consumer Goods",     26000, LoadStatus.cancelled,  -3, None, None, "REF-1209"),
+        ("1210", sysco,     "Atlanta, GA",          "Miami, FL",             660,  "Reefer",   "Fresh Produce",      38000, LoadStatus.delivered,  -4, None, None, "REF-1210"),
+
+        # --- HUMAN-BOOKED LOADS (8-30 days ago) ---
+        ("9901", walmart,   "Louisville, KY",       "Indianapolis, IN",      115,  "Dry Van",  "Packaged Goods",     27000, LoadStatus.delivered, -10, None, None, "REF-9901"),
+        ("9902", sysco,     "Columbus, OH",         "Pittsburgh, PA",        185,  "Dry Van",  "Consumer Goods",     29000, LoadStatus.delivered, -12, None, None, "REF-9902"),
+        ("9903", homedepot, "Charlotte, NC",        "Baltimore, MD",         410,  "Flatbed",  "Steel Beams",        46000, LoadStatus.delivered, -15, None, None, "REF-9903"),
+        ("9904", walmart,   "Dallas, TX",           "Oklahoma City, OK",     205,  "Reefer",   "Dairy Products",     38000, LoadStatus.delivered, -18, None, None, "REF-9904"),
+        ("9905", autozone,  "Los Angeles, CA",      "Sacramento, CA",        390,  "Dry Van",  "Electronic Parts",   24000, LoadStatus.delivered, -20, None, None, "REF-9905"),
+        ("9906", homedepot, "Chicago, IL",          "St. Louis, MO",         300,  "Dry Van",  "Hardware",           31000, LoadStatus.delivered, -22, None, None, "REF-9906"),
+        ("9907", sysco,     "Atlanta, GA",          "Nashville, TN",         250,  "Reefer",   "Frozen Food",        35000, LoadStatus.delivered, -25, None, None, "REF-9907"),
+        ("9908", sysco,     "Houston, TX",          "Memphis, TN",           580,  "Dry Van",  "Paper Products",     35000, LoadStatus.delivered, -28, None, None, "REF-9908"),
+        ("9909", walmart,   "Newark, NJ",           "Miami, FL",            1280,  "Dry Van",  "Furniture",          28000, LoadStatus.delivered, -30, None, None, "REF-9909"),
+        ("9910", homedepot, "Portland, OR",         "Seattle, WA",           180,  "Flatbed",  "Building Materials", 45000, LoadStatus.delivered, -14, None, None, "REF-9910"),
+        ("9911", walmart,   "Phoenix, AZ",          "Denver, CO",            600,  "Dry Van",  "Consumer Goods",     26000, LoadStatus.delivered, -17, None, None, "REF-9911"),
+        ("9912", sysco,     "Nashville, TN",        "Charlotte, NC",         410,  "Reefer",   "Fresh Produce",      36000, LoadStatus.delivered, -21, None, None, "REF-9912"),
+        ("9913", autozone,  "Kansas City, MO",      "St. Louis, MO",         250,  "Dry Van",  "Auto Parts",         22000, LoadStatus.delivered, -24, None, None, "REF-9913"),
+        ("9914", walmart,   "Indianapolis, IN",     "Columbus, OH",          175,  "Dry Van",  "Packaged Goods",     27000, LoadStatus.delivered, -27, None, None, "REF-9914"),
+        ("9915", homedepot, "Boston, MA",           "Charlotte, NC",         840,  "Flatbed",  "Steel Beams",        44000, LoadStatus.delivered, -29, None, None, "REF-9915"),
     ]
 
     loads = []
@@ -277,17 +293,19 @@ def seed_loads(db, shippers):
     for load, quote in zip(loads, quotes):
         load.quote_id = quote.id
         if load.status in (LoadStatus.covered, LoadStatus.delivered):
-            # Assign AI vs manual first so booked_rate reflects negotiation quality
-            is_ai = random.choice([True, False])
+            is_ai = load.load_id in AI_LOAD_IDS
             load.is_ai_booked = is_ai
+
             qr = quoted_rates[load.load_id]
-            lb = load.loadboard_rate
+
             if is_ai:
-                # Paul negotiates well: pays 88-95% of loadboard → margin ~14-19%
-                booked = round(random.uniform(lb * 0.88, lb * 0.95) / 25) * 25
+                # Paul ~22-23% margin: booked ≈ qr * 0.77-0.78
+                booked = round(random.uniform(qr * 0.770, qr * 0.780) / 25) * 25
             else:
-                # Manual broker concedes more: pays 97-105% of loadboard → margin ~8-13%
-                booked = round(random.uniform(lb * 0.97, min(lb * 1.05, load.max_rate)) / 25) * 25
+                # Human ~15% margin: booked ≈ qr * 0.85
+                booked = round(random.uniform(qr * 0.840, qr * 0.860) / 25) * 25
+
+            booked = min(booked, load.max_rate)
             load.booked_rate = float(booked)
             load.margin_pct = round((qr - booked) / qr * 100, 2)
 
@@ -559,17 +577,109 @@ def seed_quotes(db, shippers, loads):
     pass
 
 
+def seed_booked_calls_for_loads(db, carriers, loads):
+    """Create one booked call + negotiations for each covered/delivered load.
+    AI loads (Paul): call_start in last 7 days, positive sentiment.
+    Human loads: call_start 8-30 days ago, mixed sentiment.
+    """
+    AI_LOAD_IDS = {"1201","1202","1203","1204","1205","1206","1207","1208","1209","1210"}
+    authorized = [c for c in carriers.values() if c.is_authorized and c.status.value == "active"]
+
+    for load in loads.values():
+        if load.status not in (LoadStatus.covered, LoadStatus.delivered):
+            continue
+        if not load.booked_rate:
+            continue
+
+        is_ai = load.load_id in AI_LOAD_IDS
+        carrier = random.choice(authorized)
+
+        if is_ai:
+            days_ago = random.randint(1, 7)
+            sentiment = CallSentiment.positive
+            duration = random.randint(150, 280)
+            summary = (
+                f"Paul negotiated REF-{load.load_id} with {carrier.legal_name}. "
+                f"Carrier opened high, Paul anchored at posted rate. "
+                f"Closed at ${load.booked_rate:,.0f}."
+            )
+        else:
+            days_ago = random.randint(8, 30)
+            sentiment = random.choice([CallSentiment.positive, CallSentiment.positive, CallSentiment.neutral])
+            duration = random.randint(200, 420)
+            summary = (
+                f"Human broker booked REF-{load.load_id} with {carrier.legal_name}. "
+                f"Rate agreed at ${load.booked_rate:,.0f}."
+            )
+
+        call_start = TODAY - timedelta(days=days_ago, hours=random.randint(7, 18))
+        call_end = call_start + timedelta(seconds=duration)
+
+        call = Call(
+            id=str(uuid.uuid4()),
+            carrier_id=carrier.id,
+            load_id=load.id,
+            shipper_id=load.shipper_id,
+            mc_number=carrier.mc_number,
+            direction=CallDirection.inbound,
+            call_start=call_start,
+            call_end=call_end,
+            duration_seconds=duration,
+            outcome=CallOutcome.booked,
+            sentiment=sentiment,
+            transcript_summary=summary,
+            transferred_to_rep=True,
+            happyrobot_call_id=f"HR-{load.load_id}-BOOK",
+            phone_number=carrier.phone,
+        )
+        db.add(call)
+        db.flush()
+
+        # Negotiations: 1-2 rounds
+        rounds = 1 if is_ai else random.randint(1, 2)
+        lb = load.loadboard_rate
+        carrier_open = load.booked_rate * random.uniform(1.08, 1.18)
+
+        for rnd in range(1, rounds + 1):
+            carrier_offer = round(carrier_open * (1 - 0.04 * (rnd - 1)), 2)
+            is_last = rnd == rounds
+            neg = Negotiation(
+                id=str(uuid.uuid4()),
+                call_id=call.id,
+                load_id=load.id,
+                round_number=rnd,
+                carrier_offer=carrier_offer,
+                carrier_offer_per_mile=round(carrier_offer / (load.miles or 1), 4),
+                system_response=NegotiationResponse.accept if is_last else NegotiationResponse.counter,
+                counter_offer=round(lb, 2) if not is_last else None,
+                counter_offer_per_mile=round(lb / (load.miles or 1), 4) if not is_last else None,
+                notes=f"Round {rnd} — {'closed' if is_last else 'countered at posted rate'}.",
+                created_at=call_start + timedelta(minutes=rnd * 3),
+            )
+            db.add(neg)
+
+    db.commit()
+
+
+import argparse
+
 def main():
-    # Force schema update for dev environment
-    print("Resetting database schema...")
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--reset", action="store_true", help="Force reset schema")
+    args = parser.parse_known_args()[0]
 
     db = SessionLocal()
-    try:
-        # print("Clearing existing data...")
-        # clear_db(db) # metadata.drop_all already cleared it
+    
+    # SAFETY GUARD: Never drop tables in production unless explicitly forced for testing
+    if settings.APP_ENV == "production" and not args.reset:
+        print("PRODUCTION ENVIRONMENT DETECTED: Skipping schema reset.")
+        Base.metadata.create_all(bind=engine)
+    else:
+        print("RESETTING DATABASE SCHEMA (Forced or Dev mode)...")
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
 
+    try:
         print("Seeding shippers...")
         shippers = seed_shippers(db)
         print(f"  Created {len(shippers)} shippers")
@@ -584,22 +694,18 @@ def main():
 
         print("Seeding carrier load history...")
         seed_carrier_load_history(db, carriers, loads)
-        print("  Done")
 
-        print("Seeding calls and negotiations...")
+        print("Seeding historical calls and negotiations...")
         seed_calls_and_negotiations(db, carriers, loads)
-        call_count = db.query(Call).count()
-        neg_count = db.query(Negotiation).count()
-        print(f"  Created {call_count} calls, {neg_count} negotiations")
+
+        print("Seeding booked calls linked to covered/delivered loads...")
+        seed_booked_calls_for_loads(db, carriers, loads)
 
         print("\nSeed complete!")
         print(f"  Shippers:    {db.query(Shipper).count()}")
         print(f"  Loads:       {db.query(Load).count()}")
-        print(f"  Quotes:      {db.query(Quote).count()}")
-        print(f"  Carriers:    {db.query(Carrier).count()}")
-        print(f"  CarrierHist: {db.query(CarrierLoadHistory).count()}")
         print(f"  Calls:       {db.query(Call).count()}")
-        print(f"  Negs:        {db.query(Negotiation).count()}")
+        print(f"  Negotiations:{db.query(Negotiation).count()}")
     finally:
         db.close()
 
